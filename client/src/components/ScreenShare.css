@@ -1,0 +1,6 @@
+.screen-share-btn.sharing {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: rgba(255, 75, 110, 0.3);
+    animation: pulse-glow 2s ease infinite;
+}
