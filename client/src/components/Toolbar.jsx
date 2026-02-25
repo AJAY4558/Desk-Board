@@ -30,8 +30,7 @@ const SHAPE_TOOLS = [
 const BOARD_THEMES = [
     { id: 'whiteboard', label: 'Whiteboard', color: '#ffffff', border: '#ccc', defaultDraw: '#000000', chalk: false },
     { id: 'blackboard', label: 'Blackboard', color: '#2c2c2c', border: '#b8944a', defaultDraw: '#e0e0e0', chalk: true },
-    { id: 'nostalgic', label: 'Nostalgic', color: '#1f5a2d', border: '#b8944a', defaultDraw: '#f5f5dc', chalk: true },
-    { id: 'notes', label: 'Notes', color: '#fefae0', border: '#d4c98a', defaultDraw: '#333333', chalk: false }
+    { id: 'nostalgic', label: 'Nostalgic', color: '#1f5a2d', border: '#b8944a', defaultDraw: '#f5f5dc', chalk: true }
 ];
 
 const Toolbar = ({

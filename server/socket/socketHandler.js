@@ -1,6 +1,32 @@
 import Room from '../models/Room.js';
 
 const onlineUsers = new Map();
+const roomSettings = new Map();
+const pendingUsers = new Map();
+const activePolls = new Map();
+
+const getRoomSettings = (roomId) => {
+    if (!roomSettings.has(roomId)) {
+        roomSettings.set(roomId, { chatEnabled: true, entryMode: 'direct' });
+    }
+    return roomSettings.get(roomId);
+};
+
+const isHostSocket = (socket, roomId) => {
+    const users = onlineUsers.get(roomId);
+    if (!users) return false;
+    const firstUser = Array.from(users.values())[0];
+    return socket.userData?._id === firstUser?._id && users.has(socket.id);
+};
+
+const getHostSocketId = (roomId) => {
+    const users = onlineUsers.get(roomId);
+    if (!users) return null;
+    for (const [socketId, userData] of users) {
+        if (userData.isHost) return socketId;
+    }
+    return null;
+};
 
 const socketHandler = (io) => {
     io.on('connection', (socket) => {
@@ -8,74 +34,102 @@ const socketHandler = (io) => {
 
         socket.on('join-room', async ({ roomId, user }) => {
             try {
-                socket.join(roomId);
-                socket.roomId = roomId;
-                socket.userData = user;
-
-                if (!onlineUsers.has(roomId)) {
-                    onlineUsers.set(roomId, new Map());
-                }
-                onlineUsers.get(roomId).set(socket.id, {
-                    _id: user._id,
-                    username: user.username,
-                    socketId: socket.id
-                });
-
-                const roomUsers = Array.from(onlineUsers.get(roomId).values());
-                io.to(roomId).emit('user-list-update', roomUsers);
-
-                socket.to(roomId).emit('user-joined', {
-                    username: user.username,
-                    message: `${user.username} joined the room`
-                });
-
                 const room = await Room.findOne({ roomId });
-                if (room && room.canvasData && room.canvasData.length > 0) {
-                    socket.emit('canvas-state', room.canvasData);
+                if (!room) return;
+
+                const isHost = room.host.toString() === user._id;
+                const settings = getRoomSettings(roomId);
+
+                if (!isHost && settings.entryMode === 'approval') {
+                    if (!pendingUsers.has(roomId)) pendingUsers.set(roomId, new Map());
+                    pendingUsers.get(roomId).set(socket.id, { ...user, socketId: socket.id });
+                    socket.roomId = roomId;
+                    socket.userData = user;
+                    socket.emit('waiting-approval');
+                    const hostSocketId = getHostSocketId(roomId);
+                    if (hostSocketId) {
+                        const pending = Array.from(pendingUsers.get(roomId).values());
+                        io.to(hostSocketId).emit('pending-users', pending);
+                    }
+                    return;
                 }
-                if (room && room.chatHistory && room.chatHistory.length > 0) {
-                    socket.emit('chat-history', room.chatHistory);
-                }
+
+                completeJoin(socket, io, roomId, user, isHost, room);
             } catch (error) {
                 console.error('Join room error:', error);
             }
         });
 
-        socket.on('draw', (data) => {
-            socket.to(data.roomId).emit('draw', data);
+        socket.on('join-response', ({ roomId, targetSocketId, approved }) => {
+            if (!isUserHost(socket, roomId)) return;
+            const pending = pendingUsers.get(roomId);
+            if (!pending || !pending.has(targetSocketId)) return;
+
+            const userData = pending.get(targetSocketId);
+            pending.delete(targetSocketId);
+
+            const targetSocket = io.sockets.sockets.get(targetSocketId);
+            if (!targetSocket) return;
+
+            if (approved) {
+                Room.findOne({ roomId }).then(room => {
+                    if (room) completeJoin(targetSocket, io, roomId, userData, false, room);
+                });
+            } else {
+                targetSocket.emit('join-rejected');
+            }
+
+            const hostSocketId = getHostSocketId(roomId);
+            if (hostSocketId) {
+                const remaining = Array.from(pending.values());
+                io.to(hostSocketId).emit('pending-users', remaining);
+            }
         });
 
-        socket.on('shape', (data) => {
-            socket.to(data.roomId).emit('shape', data);
+        socket.on('toggle-chat', ({ roomId, enabled }) => {
+            if (!isUserHost(socket, roomId)) return;
+            const settings = getRoomSettings(roomId);
+            settings.chatEnabled = enabled;
+            io.to(roomId).emit('chat-toggled', { enabled });
+            Room.findOneAndUpdate({ roomId }, { chatEnabled: enabled }).catch(console.error);
         });
 
-        socket.on('erase', (data) => {
-            socket.to(data.roomId).emit('erase', data);
+        socket.on('update-entry-mode', ({ roomId, mode }) => {
+            if (!isUserHost(socket, roomId)) return;
+            const settings = getRoomSettings(roomId);
+            settings.entryMode = mode;
+            io.to(roomId).emit('entry-mode-updated', { mode });
+            Room.findOneAndUpdate({ roomId }, { entryMode: mode }).catch(console.error);
         });
 
-        socket.on('undo', (data) => {
-            socket.to(data.roomId).emit('undo', data);
+        socket.on('kick-user', ({ roomId, targetSocketId }) => {
+            if (!isUserHost(socket, roomId)) return;
+            const targetSocket = io.sockets.sockets.get(targetSocketId);
+            if (!targetSocket) return;
+
+            const kickedName = targetSocket.userData?.username || 'Unknown';
+            targetSocket.emit('you-were-kicked');
+            handleDisconnect(targetSocket, io, roomId);
+            targetSocket.leave(roomId);
+            io.to(roomId).emit('user-kicked', { username: kickedName });
         });
 
-        socket.on('redo', (data) => {
-            socket.to(data.roomId).emit('redo', data);
-        });
-
-        socket.on('clear-board', (data) => {
-            socket.to(data.roomId).emit('clear-board', data);
-        });
-
-        socket.on('text', (data) => {
-            socket.to(data.roomId).emit('text', data);
+        socket.on('draw', (data) => socket.to(data.roomId).emit('draw', data));
+        socket.on('shape', (data) => socket.to(data.roomId).emit('shape', data));
+        socket.on('erase', (data) => socket.to(data.roomId).emit('erase', data));
+        socket.on('undo', (data) => socket.to(data.roomId).emit('undo', data));
+        socket.on('redo', (data) => socket.to(data.roomId).emit('redo', data));
+        socket.on('clear-board', (data) => socket.to(data.roomId).emit('clear-board', data));
+        socket.on('text', (data) => socket.to(data.roomId).emit('text', data));
+        socket.on('board-theme-change', (data) => {
+            socket.to(data.roomId).emit('board-theme-change', data);
+            Room.findOneAndUpdate({ roomId: data.roomId }, { boardTheme: data.theme }).catch(console.error);
         });
 
         socket.on('canvas-update', async (data) => {
             try {
                 socket.to(data.roomId).emit('canvas-update', data);
-                await Room.findOneAndUpdate(
-                    { roomId: data.roomId },
-                    { canvasData: data.canvasData }
-                );
+                await Room.findOneAndUpdate({ roomId: data.roomId }, { canvasData: data.canvasData });
             } catch (error) {
                 console.error('Canvas update error:', error);
             }
@@ -83,15 +137,20 @@ const socketHandler = (io) => {
 
         socket.on('chat-message', async (data) => {
             try {
+                const settings = getRoomSettings(data.roomId);
+                const senderIsHost = isUserHost(socket, data.roomId);
+                if (!settings.chatEnabled && !senderIsHost) {
+                    socket.emit('chat-disabled');
+                    return;
+                }
+
                 const messageData = {
                     sender: data.sender,
                     senderName: data.senderName,
                     content: data.content,
                     timestamp: new Date()
                 };
-
                 io.to(data.roomId).emit('chat-message', messageData);
-
                 await Room.findOneAndUpdate(
                     { roomId: data.roomId },
                     { $push: { chatHistory: messageData } }
@@ -101,9 +160,64 @@ const socketHandler = (io) => {
             }
         });
 
-        socket.on('file-shared', (data) => {
-            socket.to(data.roomId).emit('file-shared', data);
+        socket.on('create-poll', ({ roomId, question, options }) => {
+            const settings = getRoomSettings(roomId);
+            const senderIsHost = isUserHost(socket, roomId);
+            if (!settings.chatEnabled && !senderIsHost) return;
+
+            const pollId = `poll_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+            const poll = {
+                id: pollId,
+                question,
+                options: options.map(opt => ({ text: opt, votes: 0 })),
+                voters: {},
+                createdBy: socket.userData?.username || 'Unknown',
+                closed: false,
+                timestamp: new Date()
+            };
+
+            if (!activePolls.has(roomId)) activePolls.set(roomId, new Map());
+            activePolls.get(roomId).set(pollId, poll);
+
+            const pollForClient = { ...poll, voters: undefined };
+            io.to(roomId).emit('new-poll', pollForClient);
         });
+
+        socket.on('vote-poll', ({ roomId, pollId, optionIndex }) => {
+            const roomPolls = activePolls.get(roomId);
+            if (!roomPolls) return;
+            const poll = roomPolls.get(pollId);
+            if (!poll || poll.closed) return;
+
+            const oderId = socket.userData?._id;
+            if (poll.voters[oderId] !== undefined) return;
+
+            if (optionIndex < 0 || optionIndex >= poll.options.length) return;
+
+            poll.voters[oderId] = optionIndex;
+            poll.options[optionIndex].votes++;
+
+            const pollForClient = {
+                id: poll.id,
+                options: poll.options,
+                totalVotes: Object.keys(poll.voters).length,
+                closed: poll.closed
+            };
+            io.to(roomId).emit('poll-update', pollForClient);
+        });
+
+        socket.on('close-poll', ({ roomId, pollId }) => {
+            if (!isUserHost(socket, roomId)) return;
+            const roomPolls = activePolls.get(roomId);
+            if (!roomPolls) return;
+            const poll = roomPolls.get(pollId);
+            if (!poll) return;
+
+            poll.closed = true;
+            io.to(roomId).emit('poll-closed', { pollId });
+        });
+
+        socket.on('file-shared', (data) => socket.to(data.roomId).emit('file-shared', data));
 
         socket.on('screen-share-start', (data) => {
             socket.to(data.roomId).emit('screen-share-start', {
@@ -119,24 +233,15 @@ const socketHandler = (io) => {
         });
 
         socket.on('webrtc-offer', (data) => {
-            socket.to(data.to).emit('webrtc-offer', {
-                offer: data.offer,
-                from: socket.id
-            });
+            socket.to(data.to).emit('webrtc-offer', { offer: data.offer, from: socket.id });
         });
 
         socket.on('webrtc-answer', (data) => {
-            socket.to(data.to).emit('webrtc-answer', {
-                answer: data.answer,
-                from: socket.id
-            });
+            socket.to(data.to).emit('webrtc-answer', { answer: data.answer, from: socket.id });
         });
 
         socket.on('webrtc-ice-candidate', (data) => {
-            socket.to(data.to).emit('webrtc-ice-candidate', {
-                candidate: data.candidate,
-                from: socket.id
-            });
+            socket.to(data.to).emit('webrtc-ice-candidate', { candidate: data.candidate, from: socket.id });
         });
 
         socket.on('leave-room', async ({ roomId }) => {
@@ -145,11 +250,73 @@ const socketHandler = (io) => {
 
         socket.on('disconnect', () => {
             console.log(`User disconnected: ${socket.id}`);
-            if (socket.roomId) {
-                handleDisconnect(socket, io, socket.roomId);
-            }
+            if (socket.roomId) handleDisconnect(socket, io, socket.roomId);
         });
     });
+};
+
+const completeJoin = async (socket, io, roomId, user, isHost, room) => {
+    socket.join(roomId);
+    socket.roomId = roomId;
+    socket.userData = user;
+    socket.emit('join-approved');
+
+    if (!onlineUsers.has(roomId)) onlineUsers.set(roomId, new Map());
+
+    onlineUsers.get(roomId).set(socket.id, {
+        _id: user._id,
+        username: user.username,
+        socketId: socket.id,
+        isHost
+    });
+
+    if (isHost) {
+        const settings = getRoomSettings(roomId);
+        settings.chatEnabled = room.chatEnabled !== false;
+        settings.entryMode = room.entryMode || 'direct';
+    }
+
+    const roomUsers = Array.from(onlineUsers.get(roomId).values());
+    io.to(roomId).emit('user-list-update', roomUsers);
+
+    socket.to(roomId).emit('user-joined', {
+        username: user.username,
+        message: `${user.username} joined the room`
+    });
+
+    if (room.canvasData && room.canvasData.length > 0) {
+        socket.emit('canvas-state', room.canvasData);
+    }
+    if (room.chatHistory && room.chatHistory.length > 0) {
+        socket.emit('chat-history', room.chatHistory);
+    }
+
+    const settings = getRoomSettings(roomId);
+    socket.emit('room-settings', {
+        chatEnabled: settings.chatEnabled,
+        entryMode: settings.entryMode,
+        boardTheme: room.boardTheme || 'whiteboard'
+    });
+
+    const roomPolls = activePolls.get(roomId);
+    if (roomPolls) {
+        for (const poll of roomPolls.values()) {
+            const pollForClient = { ...poll, voters: undefined };
+            socket.emit('new-poll', pollForClient);
+        }
+    }
+
+    if (isHost && pendingUsers.has(roomId)) {
+        const pending = Array.from(pendingUsers.get(roomId).values());
+        if (pending.length > 0) socket.emit('pending-users', pending);
+    }
+};
+
+const isUserHost = (socket, roomId) => {
+    const users = onlineUsers.get(roomId);
+    if (!users) return false;
+    const userData = users.get(socket.id);
+    return userData?.isHost === true;
 };
 
 const handleDisconnect = (socket, io, roomId) => {
@@ -170,6 +337,9 @@ const handleDisconnect = (socket, io, roomId) => {
 
         if (onlineUsers.get(roomId).size === 0) {
             onlineUsers.delete(roomId);
+            roomSettings.delete(roomId);
+            pendingUsers.delete(roomId);
+            activePolls.delete(roomId);
         }
     }
 };

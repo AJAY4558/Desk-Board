@@ -3,9 +3,6 @@ import './Canvas.css';
 
 const SHAPE_TOOLS = ['line', 'arrow', 'rect', 'circle', 'triangle', 'diamond'];
 
-const NOTES_LINE_SPACING = 30;
-const NOTES_MARGIN_X = 65;
-const NOTES_FONT_SIZE = 18;
 
 
 const getLineDash = (style, size) => {
@@ -53,7 +50,7 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
             preview.style.width = `${rect.width}px`;
             preview.style.height = `${rect.height}px`;
 
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
             ctx.scale(dpr, dpr);
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -77,6 +74,20 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
 
         return () => window.removeEventListener('resize', resize);
     }, []);
+
+    useEffect(() => {
+        const preview = previewRef.current;
+        if (!preview) return;
+        const opts = { passive: false };
+        preview.addEventListener('touchstart', startDrawing, opts);
+        preview.addEventListener('touchmove', draw, opts);
+        preview.addEventListener('touchend', stopDrawing);
+        return () => {
+            preview.removeEventListener('touchstart', startDrawing, opts);
+            preview.removeEventListener('touchmove', draw, opts);
+            preview.removeEventListener('touchend', stopDrawing);
+        };
+    });
 
     useEffect(() => {
         if (!socket) return;
@@ -121,6 +132,22 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
             socket.off('redo');
         };
     }, [socket, history, historyIndex]);
+
+    const autoSaveTimer = useRef(null);
+
+    useEffect(() => {
+        if (!socket || !roomId || historyIndex < 0) return;
+        if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+        autoSaveTimer.current = setTimeout(() => {
+            const canvasData = history.slice(0, historyIndex + 1);
+            if (canvasData.length > 0) {
+                socket.emit('canvas-update', { roomId, canvasData });
+            }
+        }, 2000);
+        return () => {
+            if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+        };
+    }, [historyIndex, socket, roomId]);
 
     const saveState = useCallback(() => {
         const canvas = canvasRef.current;
@@ -328,20 +355,12 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
             setTextInput(null);
             return;
         }
-        const isNotes = boardTheme === 'notes';
-        const fontSize = isNotes ? NOTES_FONT_SIZE : Math.max(brushSize * 4, 16);
+        const fontSize = Math.max(brushSize * 4, 16);
         const data = { text, x, y, color, fontSize };
         drawTextOnCtx(ctxRef.current, data);
         socket?.emit('text', { roomId, ...data });
         saveState();
-
-        if (isNotes) {
-            const linesUsed = text.split('\n').length;
-            const nextY = y + linesUsed * NOTES_LINE_SPACING;
-            setTextInput({ x: NOTES_MARGIN_X, y: nextY });
-        } else {
-            setTextInput(null);
-        }
+        setTextInput(null);
     };
 
     const clearPreview = () => {
@@ -370,13 +389,7 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
         const coords = getCoords(e);
 
         if (tool === 'text') {
-            let tx = coords.x;
-            let ty = coords.y;
-            if (boardTheme === 'notes') {
-                ty = Math.round(ty / NOTES_LINE_SPACING) * NOTES_LINE_SPACING;
-                tx = Math.max(tx, NOTES_MARGIN_X);
-            }
-            setTextInput({ x: tx, y: ty });
+            setTextInput({ x: coords.x, y: coords.y });
             return;
         }
 
@@ -498,34 +511,23 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
                 onMouseMove={draw}
                 onMouseUp={stopDrawing}
                 onMouseLeave={stopDrawing}
-                onTouchStart={startDrawing}
-                onTouchMove={draw}
-                onTouchEnd={stopDrawing}
             />
             {textInput && (
                 <textarea
                     ref={textareaRef}
-                    className={`canvas-text-input ${boardTheme === 'notes' ? 'notes-text-input' : ''}`}
+                    className="canvas-text-input"
                     style={{
                         left: textInput.x,
                         top: textInput.y,
                         color: color,
-                        fontSize: boardTheme === 'notes'
-                            ? `${NOTES_FONT_SIZE}px`
-                            : `${Math.max(brushSize * 4, 16)}px`,
-                        lineHeight: boardTheme === 'notes'
-                            ? `${NOTES_LINE_SPACING}px`
-                            : '1.3',
+                        fontSize: `${Math.max(brushSize * 4, 16)}px`,
+                        lineHeight: '1.3',
                     }}
                     autoFocus
                     onBlur={(e) => commitText(e.target.value, textInput.x, textInput.y)}
                     onKeyDown={(e) => {
                         if (e.key === 'Escape') {
                             e.target.blur();
-                        }
-                        if (boardTheme === 'notes' && e.key === 'Enter') {
-                            e.preventDefault();
-                            commitText(e.target.value, textInput.x, textInput.y);
                         }
                     }}
                 />

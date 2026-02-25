@@ -60,11 +60,3 @@
     word-break: break-word;
     field-sizing: content;
 }
-
-.notes-text-input {
-    border: none;
-    min-width: 200px;
-    min-height: 30px;
-    padding: 5px 4px;
-    border-radius: 0;
-}

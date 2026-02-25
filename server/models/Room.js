@@ -65,6 +65,20 @@ const roomSchema = new mongoose.Schema({
     },
     chatHistory: [messageSchema],
     files: [fileSchema],
+    chatEnabled: {
+        type: Boolean,
+        default: true
+    },
+    entryMode: {
+        type: String,
+        enum: ['direct', 'approval'],
+        default: 'direct'
+    },
+    boardTheme: {
+        type: String,
+        enum: ['whiteboard', 'blackboard', 'nostalgic'],
+        default: 'whiteboard'
+    },
     isActive: {
         type: Boolean,
         default: true

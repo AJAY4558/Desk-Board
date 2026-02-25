@@ -13,7 +13,7 @@ import ScreenShare from '../components/ScreenShare';
 import {
     LogOut, Copy, Check, Users, Sun, Moon, Save, Download,
     Share2, MessageCircle, PanelRightClose, PanelRightOpen,
-    FileImage, FileText, X, GripVertical
+    FileImage, FileText, X, GripVertical, Settings
 } from 'lucide-react';
 import './WhiteboardRoom.css';
 
@@ -40,10 +40,21 @@ const WhiteboardRoom = () => {
     const [copied, setCopied] = useState(false);
     const [showLeaveModal, setShowLeaveModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [messages, setMessages] = useState([]);
     const [sharedFiles, setSharedFiles] = useState([]);
     const [notification, setNotification] = useState('');
     const canvasRef = useRef(null);
+
+    const [chatEnabled, setChatEnabled] = useState(true);
+    const [isMuted, setIsMuted] = useState(false);
+    const [entryMode, setEntryMode] = useState('direct');
+    const [pendingUsers, setPendingUsers] = useState([]);
+    const [polls, setPolls] = useState([]);
+    const [myVotes, setMyVotes] = useState({});
+    const [waitingApproval, setWaitingApproval] = useState(false);
+    const [hasUnreadChat, setHasUnreadChat] = useState(false);
+    const [hasUserNotif, setHasUserNotif] = useState(false);
 
     useEffect(() => {
         const loadRoom = async () => {
@@ -70,7 +81,10 @@ const WhiteboardRoom = () => {
         socket.on('user-joined', (data) => showNotification(`${data.username} joined`));
         socket.on('user-left', (data) => showNotification(`${data.username} left`));
         socket.on('chat-history', (history) => setMessages(history));
-        socket.on('chat-message', (msg) => setMessages(prev => [...prev, msg]));
+        socket.on('chat-message', (msg) => {
+            setMessages(prev => [...prev, msg]);
+            if (!sidebarOpen || sidebarTab !== 'chat') setHasUnreadChat(true);
+        });
 
         socket.on('file-shared', (data) => {
             setSharedFiles(prev => [...prev, data]);
@@ -83,6 +97,71 @@ const WhiteboardRoom = () => {
             }
         });
 
+        socket.on('room-settings', (settings) => {
+            setChatEnabled(settings.chatEnabled);
+            setEntryMode(settings.entryMode);
+            if (settings.boardTheme) setBoardTheme(settings.boardTheme);
+        });
+
+        socket.on('chat-toggled', ({ enabled }) => {
+            setChatEnabled(enabled);
+        });
+
+        socket.on('entry-mode-updated', ({ mode }) => {
+            setEntryMode(mode);
+            showNotification(`Entry mode: ${mode === 'approval' ? 'Approval required' : 'Direct join'}`);
+        });
+
+        socket.on('user-kicked', ({ username }) => {
+            showNotification(`${username} was kicked`);
+        });
+
+        socket.on('you-were-kicked', () => {
+            disconnectSocket();
+            navigate('/dashboard');
+            alert('You were kicked from the room by the host.');
+        });
+
+        socket.on('pending-users', (users) => {
+            setPendingUsers(users);
+            if (users.length > 0) setHasUserNotif(true);
+        });
+        socket.on('waiting-approval', () => setWaitingApproval(true));
+        socket.on('join-approved', () => setWaitingApproval(false));
+
+        socket.on('board-theme-change', ({ theme: newTheme }) => {
+            setBoardTheme(newTheme);
+        });
+
+        socket.on('join-rejected', () => {
+            setWaitingApproval(false);
+            navigate('/dashboard');
+            alert('The host denied your join request.');
+        });
+
+        socket.on('chat-disabled', () => {
+            showNotification('Chat is currently disabled');
+        });
+
+        socket.on('new-poll', (poll) => {
+            setPolls(prev => {
+                const exists = prev.find(p => p.id === poll.id);
+                if (exists) return prev;
+                return [...prev, poll];
+            });
+        });
+
+        socket.on('poll-update', (update) => {
+            setPolls(prev => prev.map(p => {
+                if (p.id !== update.id) return p;
+                return { ...p, options: update.options, closed: update.closed };
+            }));
+        });
+
+        socket.on('poll-closed', ({ pollId }) => {
+            setPolls(prev => prev.map(p => p.id === pollId ? { ...p, closed: true } : p));
+        });
+
         return () => {
             clearTimeout(timer);
             socket.emit('leave-room', { roomId });
@@ -93,6 +172,20 @@ const WhiteboardRoom = () => {
             socket.off('chat-message');
             socket.off('file-shared');
             socket.off('canvas-state');
+            socket.off('room-settings');
+            socket.off('chat-toggled');
+            socket.off('entry-mode-updated');
+            socket.off('user-kicked');
+            socket.off('you-were-kicked');
+            socket.off('pending-users');
+            socket.off('waiting-approval');
+            socket.off('join-approved');
+            socket.off('board-theme-change');
+            socket.off('join-rejected');
+            socket.off('chat-disabled');
+            socket.off('new-poll');
+            socket.off('poll-update');
+            socket.off('poll-closed');
         };
     }, [socket, room]);
 
@@ -118,9 +211,7 @@ const WhiteboardRoom = () => {
                 }
             }
         }
-        if (socket) {
-            socket.emit('leave-room', { roomId });
-        }
+        if (socket) socket.emit('leave-room', { roomId });
         disconnectSocket();
         navigate('/dashboard');
     };
@@ -197,10 +288,66 @@ const WhiteboardRoom = () => {
         showNotification('Room link copied!');
     };
 
+    const handleBoardThemeChange = (newTheme) => {
+        setBoardTheme(newTheme);
+        if (socket) {
+            socket.emit('board-theme-change', { roomId, theme: newTheme });
+        }
+    };
+
     const openSidebar = (tab) => {
         setSidebarTab(tab);
         setSidebarOpen(true);
+        if (tab === 'chat') setHasUnreadChat(false);
+        if (tab === 'users') setHasUserNotif(false);
     };
+
+    const handleToggleChat = () => {
+        if (!socket) return;
+        const next = !chatEnabled;
+        socket.emit('toggle-chat', { roomId, enabled: next });
+        showNotification(next ? 'You enabled chat' : 'You disabled chat');
+    };
+
+    const handleUpdateEntryMode = () => {
+        if (!socket) return;
+        const newMode = entryMode === 'direct' ? 'approval' : 'direct';
+        socket.emit('update-entry-mode', { roomId, mode: newMode });
+    };
+
+    const handleKickUser = (targetSocketId, username) => {
+        if (!socket) return;
+        if (window.confirm(`Kick ${username} from the room?`)) {
+            socket.emit('kick-user', { roomId, targetSocketId });
+        }
+    };
+
+    const handleJoinResponse = (targetSocketId, approved) => {
+        if (!socket) return;
+        socket.emit('join-response', { roomId, targetSocketId, approved });
+    };
+
+    const handleCreatePoll = (question, options) => {
+        if (!socket) return;
+        socket.emit('create-poll', { roomId, question, options });
+    };
+
+    const handleVotePoll = (pollId, optionIndex) => {
+        if (!socket) return;
+        if (myVotes[pollId] !== undefined) return;
+        socket.emit('vote-poll', { roomId, pollId, optionIndex });
+        setMyVotes(prev => ({ ...prev, [pollId]: optionIndex }));
+    };
+
+    const handleClosePoll = (pollId) => {
+        if (!socket) return;
+        socket.emit('close-poll', { roomId, pollId });
+    };
+
+    const pollsWithVotes = polls.map(p => ({
+        ...p,
+        votedOption: myVotes[p.id]
+    }));
 
     const startResize = useCallback((e) => {
         e.preventDefault();
@@ -225,6 +372,16 @@ const WhiteboardRoom = () => {
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
     }, []);
+
+    if (waitingApproval) {
+        return (
+            <div className="wb-loading">
+                <div className="loading-spinner" />
+                <p>Waiting for host approval...</p>
+                <button className="btn btn-secondary" onClick={() => navigate('/dashboard')}>Cancel</button>
+            </div>
+        );
+    }
 
     if (!room) {
         return (
@@ -260,11 +417,18 @@ const WhiteboardRoom = () => {
                     {isHost && <span className="badge badge-accent">Host</span>}
                 </div>
                 <div className="topbar-right">
-                    <button className="btn-icon" onClick={() => openSidebar('chat')} title="Chat">
+                    {isHost && (
+                        <button className="btn-icon" onClick={() => setShowSettingsModal(true)} title="Room Settings">
+                            <Settings size={16} />
+                        </button>
+                    )}
+                    <button className="btn-icon topbar-btn-notif" onClick={() => openSidebar('chat')} title="Chat">
                         <MessageCircle size={16} />
+                        {hasUnreadChat && <span className="notif-dot" />}
                     </button>
-                    <button className="btn-icon" onClick={() => openSidebar('users')} title="Users">
+                    <button className="btn-icon topbar-btn-notif" onClick={() => openSidebar('users')} title="Users">
                         <Users size={16} />
+                        {hasUserNotif && <span className="notif-dot" />}
                     </button>
                     <button className="btn-icon" onClick={shareRoom} title="Share Room">
                         <Share2 size={16} />
@@ -297,7 +461,7 @@ const WhiteboardRoom = () => {
                     onClear={handleClear}
                     isHost={isHost}
                     boardTheme={boardTheme}
-                    setBoardTheme={setBoardTheme}
+                    setBoardTheme={handleBoardThemeChange}
                 />
 
                 {/* Center: Canvas */}
@@ -315,7 +479,7 @@ const WhiteboardRoom = () => {
                     />
                 </div>
 
-                {/* Right Sidebar (inline) */}
+                {/* Right Sidebar */}
                 {sidebarOpen && (
                     <aside className="wb-sidebar open" style={{ width: sidebarWidth }}>
                         <div className="sidebar-resize-handle" onMouseDown={startResize}>
@@ -353,18 +517,39 @@ const WhiteboardRoom = () => {
                                         messages={messages}
                                         onSend={handleSendMessage}
                                         currentUserId={user._id}
+                                        chatEnabled={chatEnabled}
+                                        isMuted={isMuted}
+                                        polls={pollsWithVotes}
+                                        onCreatePoll={handleCreatePoll}
+                                        onVotePoll={handleVotePoll}
+                                        onClosePoll={handleClosePoll}
+                                        isHost={isHost}
                                     />
                                 )}
                                 {sidebarTab === 'users' && (
-                                    <OnlineUsers users={onlineUsers} hostId={room.host._id} currentUserId={user._id} />
+                                    <OnlineUsers
+                                        users={onlineUsers}
+                                        hostId={room.host._id}
+                                        currentUserId={user._id}
+                                        isHost={isHost}
+                                        onKick={handleKickUser}
+                                        isMuted={isMuted}
+                                        onMuteToggle={() => setIsMuted(prev => !prev)}
+                                        pendingUsers={pendingUsers}
+                                        onJoinResponse={handleJoinResponse}
+                                    />
                                 )}
                                 {sidebarTab === 'files' && (
                                     <div className="files-list">
+                                        <div className="files-upload-row">
+                                            <FileUpload socket={socket} roomId={roomId} user={user} onUploaded={handleFileUploaded} />
+                                            <span className="files-upload-label">Upload a file</span>
+                                        </div>
                                         {sharedFiles.length === 0 ? (
                                             <div className="files-empty">
                                                 <FileText size={24} />
                                                 <p>No files shared yet</p>
-                                                <span>Use the upload button in the bottom bar</span>
+                                                <span>Click the upload icon above to share</span>
                                             </div>
                                         ) : (
                                             sharedFiles.map((sf, i) => {
@@ -412,10 +597,7 @@ const WhiteboardRoom = () => {
                 <button className="btn-icon" onClick={toggleTheme} title="Toggle Theme">
                     {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
                 </button>
-                <FileUpload socket={socket} roomId={roomId} user={user} onUploaded={handleFileUploaded} />
             </footer>
-
-
 
             {/* Leave Modal */}
             {showLeaveModal && (
@@ -451,6 +633,55 @@ const WhiteboardRoom = () => {
                         </div>
                         <div className="modal-actions">
                             <button className="btn btn-secondary" onClick={() => setShowSaveModal(false)}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Host Settings Modal */}
+            {showSettingsModal && isHost && (
+                <div className="modal-overlay" onClick={() => setShowSettingsModal(false)}>
+                    <div className="modal-content animate-scale-in settings-modal" onClick={e => e.stopPropagation()}>
+                        <h2 className="modal-title">Room Settings</h2>
+
+                        <div className="settings-list">
+                            <div className="setting-row">
+                                <div className="setting-info">
+                                    <span className="setting-label">Chat</span>
+                                    <span className="setting-desc">
+                                        {chatEnabled ? 'Chat is enabled for all users' : 'Chat is disabled'}
+                                    </span>
+                                </div>
+                                <button
+                                    className={`toggle-switch ${chatEnabled ? 'on' : ''}`}
+                                    onClick={handleToggleChat}
+                                >
+                                    <span className="toggle-thumb" />
+                                </button>
+                            </div>
+
+                            <div className="setting-row">
+                                <div className="setting-info">
+                                    <span className="setting-label">Entry Mode</span>
+                                    <span className="setting-desc">
+                                        {entryMode === 'direct'
+                                            ? 'Anyone with the code can join directly'
+                                            : 'Users need your approval to join'}
+                                    </span>
+                                </div>
+                                <button
+                                    className={`toggle-switch ${entryMode === 'approval' ? 'on' : ''}`}
+                                    onClick={handleUpdateEntryMode}
+                                >
+                                    <span className="toggle-thumb" />
+                                </button>
+                            </div>
+                        </div>
+
+
+
+                        <div className="modal-actions">
+                            <button className="btn btn-secondary" onClick={() => setShowSettingsModal(false)}>Close</button>
                         </div>
                     </div>
                 </div>

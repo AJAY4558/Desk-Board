@@ -199,6 +199,7 @@
 .size-preview {
     border-radius: 50%;
     background: var(--text-primary);
+    border: 1px solid var(--text-tertiary);
     transition: all var(--transition-fast);
     min-width: 3px;
     min-height: 3px;
@@ -247,6 +248,8 @@
     height: 18px;
     border-radius: 50%;
     border: 2px solid;
+    outline: 2px solid var(--text-secondary);
+    outline-offset: 0px;
     transition: transform var(--transition-fast);
 }
 
