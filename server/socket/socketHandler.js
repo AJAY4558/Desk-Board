@@ -1,13 +1,13 @@
 import Room from '../models/Room.js';
 
-const onlineUsers = new Map();
-const roomSettings = new Map();
+const onlineUsers = new Map(); // roomId -> Map(socketId -> { _id, username, socketId, isHost, canEdit, canPresent })
+const roomSettings = new Map(); // roomId -> { chatEnabled, entryMode, globalCanvasOpen }
 const pendingUsers = new Map();
 const activePolls = new Map();
 
 const getRoomSettings = (roomId) => {
     if (!roomSettings.has(roomId)) {
-        roomSettings.set(roomId, { chatEnabled: true, entryMode: 'direct' });
+        roomSettings.set(roomId, { chatEnabled: true, entryMode: 'direct', globalCanvasOpen: false });
     }
     return roomSettings.get(roomId);
 };
@@ -100,6 +100,57 @@ const socketHandler = (io) => {
             settings.entryMode = mode;
             io.to(roomId).emit('entry-mode-updated', { mode });
             Room.findOneAndUpdate({ roomId }, { entryMode: mode }).catch(console.error);
+        });
+
+        socket.on('toggle-board', ({ roomId, open }) => {
+            const users = onlineUsers.get(roomId);
+            const user = users?.get(socket.id);
+            if (!user) return;
+
+            const settings = getRoomSettings(roomId);
+
+            // If board is being closed, only the current presenter (or host) can do it
+            if (!open && settings.globalCanvasOpen) {
+                if (settings.activePresenterId && settings.activePresenterId !== socket.id && !user.isHost) {
+                    return; // Ignore if not the presenter or host
+                }
+            }
+
+            // Only host or user with 'canPresent' can toggle globally
+            if (user.isHost || user.canPresent) {
+                settings.globalCanvasOpen = open;
+                settings.activePresenterId = open ? socket.id : null;
+
+                io.to(roomId).emit('board-status-update', {
+                    open,
+                    actor: user.username,
+                    actorId: settings.activePresenterId
+                });
+            }
+        });
+
+        socket.on('update-permissions', ({ roomId, targetSocketId, permissions }) => {
+            const users = onlineUsers.get(roomId);
+            const host = users?.get(socket.id);
+
+            // Only host can change permissions
+            if (!host || !host.isHost) return;
+
+            const targetUser = users.get(targetSocketId);
+            if (targetUser) {
+                targetUser.canEdit = permissions.canEdit;
+                targetUser.canPresent = permissions.canPresent;
+
+                // Update specific user
+                io.to(targetSocketId).emit('permissions-updated', {
+                    canEdit: targetUser.canEdit,
+                    canPresent: targetUser.canPresent
+                });
+
+                // Update everyone's user list to reflect status (optional but good for UI)
+                const roomUsers = Array.from(users.values());
+                io.to(roomId).emit('user-list-update', roomUsers);
+            }
         });
 
         socket.on('kick-user', ({ roomId, targetSocketId }) => {
@@ -233,7 +284,11 @@ const socketHandler = (io) => {
         });
 
         socket.on('webrtc-offer', (data) => {
-            socket.to(data.to).emit('webrtc-offer', { offer: data.offer, from: socket.id });
+            socket.to(data.to).emit('webrtc-offer', {
+                offer: data.offer,
+                from: socket.id,
+                username: data.username
+            });
         });
 
         socket.on('webrtc-answer', (data) => {
@@ -242,6 +297,13 @@ const socketHandler = (io) => {
 
         socket.on('webrtc-ice-candidate', (data) => {
             socket.to(data.to).emit('webrtc-ice-candidate', { candidate: data.candidate, from: socket.id });
+        });
+
+        socket.on('webrtc-ready', (data) => {
+            socket.to(data.roomId).emit('webrtc-ready', {
+                socketId: socket.id,
+                username: socket.userData?.username
+            });
         });
 
         socket.on('leave-room', async ({ roomId }) => {
@@ -267,13 +329,16 @@ const completeJoin = async (socket, io, roomId, user, isHost, room) => {
         _id: user._id,
         username: user.username,
         socketId: socket.id,
-        isHost
+        isHost,
+        canEdit: isHost, // Host can always edit
+        canPresent: isHost // Host can always present
     });
 
     if (isHost) {
         const settings = getRoomSettings(roomId);
         settings.chatEnabled = room.chatEnabled !== false;
         settings.entryMode = room.entryMode || 'direct';
+        settings.globalCanvasOpen = false;
     }
 
     const roomUsers = Array.from(onlineUsers.get(roomId).values());
@@ -281,6 +346,7 @@ const completeJoin = async (socket, io, roomId, user, isHost, room) => {
 
     socket.to(roomId).emit('user-joined', {
         username: user.username,
+        socketId: socket.id,
         message: `${user.username} joined the room`
     });
 
@@ -295,7 +361,16 @@ const completeJoin = async (socket, io, roomId, user, isHost, room) => {
     socket.emit('room-settings', {
         chatEnabled: settings.chatEnabled,
         entryMode: settings.entryMode,
-        boardTheme: room.boardTheme || 'whiteboard'
+        boardTheme: room.boardTheme || 'whiteboard',
+        globalCanvasOpen: settings.globalCanvasOpen || false,
+        activePresenterId: settings.activePresenterId || null
+    });
+
+    // Send individual permissions to the joining user
+    const currentUser = onlineUsers.get(roomId).get(socket.id);
+    socket.emit('permissions-updated', {
+        canEdit: currentUser.canEdit,
+        canPresent: currentUser.canPresent
     });
 
     const roomPolls = activePolls.get(roomId);
@@ -330,6 +405,7 @@ const handleDisconnect = (socket, io, roomId) => {
 
         if (socket.userData) {
             socket.to(roomId).emit('user-left', {
+                socketId: socket.id,
                 username: socket.userData.username,
                 message: `${socket.userData.username} left the room`
             });

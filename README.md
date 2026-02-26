@@ -1,4 +1,4 @@
-# CollabBoard — Real-Time Collaborative Whiteboard
+# DeskBoard — Real-Time Collaborative Workspace
 
 A full-stack MERN application for real-time collaborative drawing, chat, file sharing, and screen sharing. Features a premium glassmorphism UI (Apple-style) with dark/light mode.
 

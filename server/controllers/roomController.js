@@ -18,7 +18,7 @@ export const createRoom = async (req, res) => {
 
         const room = await Room.create({
             roomId,
-            name: name || 'Untitled Whiteboard',
+            name: name || 'Untitled DeskBoard',
             host: req.user._id,
             participants: [req.user._id]
         });

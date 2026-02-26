@@ -176,3 +176,53 @@
     gap: 6px;
     flex-shrink: 0;
 }
+
+.user-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.permission-toggles {
+    display: flex;
+    gap: 4px;
+    padding: 2px;
+    background: var(--surface-subtle);
+    border-radius: 8px;
+    border: 1px solid var(--glass-border);
+}
+
+.btn-perm {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-perm:hover {
+    background: var(--surface-hover);
+    color: var(--accent);
+}
+
+.btn-perm.active {
+    background: var(--accent);
+    color: white;
+}
+
+.user-perms-badges {
+    display: flex;
+    gap: 4px;
+    color: var(--accent);
+    opacity: 0.8;
+}
+
+.perm-badge-icon {
+    padding: 2px;
+}

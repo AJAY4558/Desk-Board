@@ -1,5 +1,5 @@
 .toolbar {
-    width: 64px;
+    width: 68px;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -7,6 +7,74 @@
     border-radius: var(--radius-lg);
     overflow-y: auto;
     flex-shrink: 0;
+    max-height: 100%;
+    align-self: center;
+    /* Center vertically in the flex body */
+    z-index: 10;
+    box-shadow: var(--shadow-lg);
+    /* Added for depth */
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(12px);
+    background: var(--glass-strong);
+    position: relative;
+    /* For lock indicator */
+    transition: all var(--transition-md);
+}
+
+.toolbar-readonly {
+    opacity: 0.6;
+    pointer-events: none;
+    /* Block all clicks on the container itself */
+    filter: grayscale(0.5);
+}
+
+.toolbar-lock-indicator {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: var(--surface);
+    border: 1px solid var(--glass-border);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    box-shadow: var(--shadow-sm);
+}
+
+.toolbar button:disabled,
+.toolbar input:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+/* ... existing styles ... */
+
+@media (max-width: 500px) {
+    .toolbar {
+        width: auto;
+        flex-direction: row;
+        position: fixed;
+        bottom: 90px;
+        /* Above the bottom bar */
+        left: 12px;
+        right: 12px;
+        z-index: 50;
+        padding: 8px 12px;
+        overflow-x: auto;
+        overflow-y: visible;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    /* ... hide labels on mobile ... */
+    .tool-group {
+        flex-direction: row;
+        border-bottom: none;
+        border-right: 1px solid var(--glass-border);
+        padding: 0 8px;
+    }
 }
 
 .tool-group {
@@ -253,18 +321,21 @@
     transition: transform var(--transition-fast);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 500px) {
     .toolbar {
         width: auto;
         flex-direction: row;
         position: fixed;
-        bottom: 56px;
-        left: 8px;
-        right: 8px;
-        z-index: 20;
+        bottom: 96px;
+        /* Clearly above the refined bottom bar */
+        left: 12px;
+        right: 12px;
+        z-index: 50;
         padding: 8px 12px;
         overflow-x: auto;
         overflow-y: visible;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.25);
+        border: 1px solid var(--glass-border);
     }
 
     .tool-group {

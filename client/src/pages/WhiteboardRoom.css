@@ -95,15 +95,37 @@
 }
 
 /* Canvas Area */
-.wb-canvas-area {
+.wb-center-area {
     flex: 1;
+    height: 100%;
     position: relative;
-    border-radius: var(--radius-lg);
     overflow: hidden;
-    background: #ffffff;
+    display: flex;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
     border: 1px solid var(--glass-border);
-    min-width: 0;
-    transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.wb-video-wrapper,
+.wb-canvas-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.wb-video-wrapper.hidden,
+.wb-canvas-area.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.98);
+    z-index: -1;
+}
+
+.wb-canvas-area {
+    z-index: 1;
 }
 
 .wb-canvas-area.theme-whiteboard {
@@ -310,16 +332,85 @@
     color: var(--text-tertiary);
 }
 
-/* Bottom Bar */
+/* Bottom Bar Controls */
 .wb-bottombar {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 8px 16px;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 72px;
     margin: 0 8px 8px;
     border-radius: var(--radius-lg);
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px);
+    box-shadow: var(--shadow-lg);
     flex-shrink: 0;
+    z-index: 100;
+}
+
+.bottom-center {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    /* Slightly more space between main controls */
+}
+
+.btn-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 12px;
+    background: rgba(var(--bg-rgb), 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-control:hover {
+    background: rgba(var(--bg-rgb), 0.8);
+    transform: translateY(-2px);
+}
+
+.btn-control.off {
+    background: rgba(235, 77, 75, 0.2);
+    color: #eb4d4b;
+    border-color: rgba(235, 77, 75, 0.3);
+}
+
+.btn-control.off:hover {
+    background: rgba(235, 77, 75, 0.3);
+}
+
+.btn-control.active {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+}
+
+.control-divider {
+    width: 1px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0 8px;
+}
+
+.control-label {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.bottom-left,
+.bottom-right {
+    display: flex;
+    align-items: center;
+    min-width: 100px;
+}
+
+.bottom-right {
+    justify-content: flex-end;
 }
 
 /* Save Modal Options */

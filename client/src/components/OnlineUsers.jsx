@@ -1,7 +1,7 @@
-import { Crown, X, VolumeX, Volume2, Check, XCircle } from 'lucide-react';
+import { Crown, X, VolumeX, Volume2, Check, XCircle, Pencil, Presentation, ShieldAlert } from 'lucide-react';
 import './OnlineUsers.css';
 
-const OnlineUsers = ({ users, hostId, currentUserId, isHost, onKick, isMuted, onMuteToggle, pendingUsers, onJoinResponse }) => {
+const OnlineUsers = ({ users, hostId, currentUserId, isHost, onKick, isMuted, onMuteToggle, pendingUsers, onJoinResponse, onUpdatePermission }) => {
     const getInitials = (name) => name ? name.slice(0, 2).toUpperCase() : '??';
 
     return (
@@ -63,15 +63,43 @@ const OnlineUsers = ({ users, hostId, currentUserId, isHost, onKick, isMuted, on
                                 </span>
                             )}
                         </div>
-                        {isHost && u._id !== currentUserId && u._id !== hostId && (
-                            <button
-                                className="btn-icon kick-btn"
-                                onClick={() => onKick(u.socketId, u.username)}
-                                title={`Kick ${u.username}`}
-                            >
-                                <X size={14} />
-                            </button>
-                        )}
+                        <div className="user-controls">
+                            {isHost && u._id !== currentUserId && (
+                                <div className="permission-toggles">
+                                    <button
+                                        className={`btn-perm ${u.canEdit ? 'active' : ''}`}
+                                        onClick={() => onUpdatePermission(u.socketId, { canEdit: !u.canEdit, canPresent: u.canPresent })}
+                                        title={u.canEdit ? 'Revoke Edit' : 'Grant Edit'}
+                                    >
+                                        <Pencil size={12} />
+                                    </button>
+                                    <button
+                                        className={`btn-perm ${u.canPresent ? 'active' : ''}`}
+                                        onClick={() => onUpdatePermission(u.socketId, { canEdit: u.canEdit, canPresent: !u.canPresent })}
+                                        title={u.canPresent ? 'Revoke Present' : 'Grant Present'}
+                                    >
+                                        <Presentation size={12} />
+                                    </button>
+                                </div>
+                            )}
+
+                            {isHost && u._id !== currentUserId && u._id !== hostId && (
+                                <button
+                                    className="btn-icon kick-btn"
+                                    onClick={() => onKick(u.socketId, u.username)}
+                                    title={`Kick ${u.username}`}
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+
+                            {!isHost && u._id !== currentUserId && (u.canEdit || u.canPresent) && (
+                                <div className="user-perms-badges">
+                                    {u.canEdit && <Pencil size={10} className="perm-badge-icon" title="Can Edit" />}
+                                    {u.canPresent && <Presentation size={10} className="perm-badge-icon" title="Can Present" />}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 ))}
             </div>

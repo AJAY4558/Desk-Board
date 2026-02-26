@@ -47,7 +47,7 @@ const roomSchema = new mongoose.Schema({
     },
     name: {
         type: String,
-        default: 'Untitled Whiteboard',
+        default: 'Untitled DeskBoard',
         maxlength: 100
     },
     host: {

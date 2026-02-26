@@ -59,7 +59,7 @@ const Login = () => {
                                 </defs>
                             </svg>
                         </div>
-                        <span className="logo-text">CollabBoard</span>
+                        <span className="logo-text">DeskBoard</span>
                     </div>
                     <h1 className="auth-title">Welcome back</h1>
                     <p className="auth-subtitle">Sign in to continue collaborating</p>

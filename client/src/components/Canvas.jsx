@@ -13,7 +13,7 @@ const getLineDash = (style, size) => {
     }
 };
 
-const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, socket, roomId, boardTheme = 'whiteboard' }, ref) => {
+const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, socket, roomId, boardTheme = 'whiteboard', readOnly = false }, ref) => {
     const canvasRef = useRef(null);
     const previewRef = useRef(null);
     const ctxRef = useRef(null);
@@ -92,51 +92,61 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
     useEffect(() => {
         if (!socket) return;
 
-        socket.on('draw', (data) => {
+        const handleDraw = (data) => {
             drawLineOnCtx(ctxRef.current, data.x0, data.y0, data.x1, data.y1, data.color, data.size, data.style || 'solid');
-        });
+        };
 
-        socket.on('erase', (data) => {
+        const handleErase = (data) => {
             eraseLine(data.x0, data.y0, data.x1, data.y1, data.size);
-        });
+        };
 
-        socket.on('shape', (data) => {
+        const handleShape = (data) => {
             drawShapeOnCtx(ctxRef.current, data);
             saveState();
-        });
+        };
 
-        socket.on('clear-board', () => {
+        const handleClear = () => {
             clearCanvas();
-        });
+        };
 
-        socket.on('text', (data) => {
+        const handleText = (data) => {
             drawTextOnCtx(ctxRef.current, data);
             saveState();
-        });
+        };
 
-        socket.on('undo', () => {
+        const handleUndoEvent = () => {
             performUndo();
-        });
+        };
 
-        socket.on('redo', () => {
+        const handleRedoEvent = () => {
             performRedo();
-        });
+        };
+
+        socket.on('draw', handleDraw);
+        socket.on('erase', handleErase);
+        socket.on('shape', handleShape);
+        socket.on('clear-board', handleClear);
+        socket.on('text', handleText);
+        socket.on('undo', handleUndoEvent);
+        socket.on('redo', handleRedoEvent);
 
         return () => {
-            socket.off('draw');
-            socket.off('erase');
-            socket.off('shape');
-            socket.off('clear-board');
-            socket.off('text');
-            socket.off('undo');
-            socket.off('redo');
+            socket.off('draw', handleDraw);
+            socket.off('erase', handleErase);
+            socket.off('shape', handleShape);
+            socket.off('clear-board', handleClear);
+            socket.off('text', handleText);
+            socket.off('undo', handleUndoEvent);
+            socket.off('redo', handleRedoEvent);
         };
-    }, [socket, history, historyIndex]);
+    }, [socket]); // FIXED: Removed history and historyIndex from dependencies
 
     const autoSaveTimer = useRef(null);
 
     useEffect(() => {
-        if (!socket || !roomId || historyIndex < 0) return;
+        // Only authorized users should emit canvas updates to the server
+        if (!socket || !roomId || historyIndex < 0 || readOnly) return;
+
         if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
         autoSaveTimer.current = setTimeout(() => {
             const canvasData = history.slice(0, historyIndex + 1);
@@ -147,7 +157,7 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
         return () => {
             if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
         };
-    }, [historyIndex, socket, roomId]);
+    }, [historyIndex, socket, roomId, readOnly]);
 
     const saveState = useCallback(() => {
         const canvas = canvasRef.current;
@@ -385,6 +395,7 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
     const isShapeTool = SHAPE_TOOLS.includes(tool);
 
     const startDrawing = (e) => {
+        if (readOnly) return;
         e.preventDefault();
         const coords = getCoords(e);
 
@@ -403,7 +414,8 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
     };
 
     const draw = (e) => {
-        if (!isDrawing || !lastPoint.current) return;
+        if (readOnly) return;
+        if (!isDrawing) return;
         e.preventDefault();
         const coords = getCoords(e);
 
@@ -439,6 +451,7 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
     };
 
     const stopDrawing = (e) => {
+        if (readOnly) return;
         if (!isDrawing) return;
 
         if (isShapeTool && shapeStart.current) {

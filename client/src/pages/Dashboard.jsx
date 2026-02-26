@@ -36,7 +36,7 @@ const Dashboard = () => {
         setLoading(true);
         setError('');
         try {
-            const room = await roomAPI.create(roomName || 'Untitled Whiteboard');
+            const room = await roomAPI.create(roomName || 'Untitled DeskBoard');
             navigate(`/room/${room.roomId}`);
         } catch (err) {
             setError(err.message);
@@ -104,7 +104,7 @@ const Dashboard = () => {
                                 </linearGradient>
                             </defs>
                         </svg>
-                        <span className="logo-text">CollabBoard</span>
+                        <span className="logo-text">DeskBoard</span>
                     </div>
                 </div>
                 <div className="nav-right">
@@ -129,7 +129,7 @@ const Dashboard = () => {
                     </div>
                     <div>
                         <h1 className="welcome-title">Welcome, {user?.username}! 👋</h1>
-                        <p className="welcome-sub">Create or join a whiteboard room to start collaborating</p>
+                        <p className="welcome-sub">Create or join a DeskBoard room to start collaborating</p>
                     </div>
                 </div>
 
@@ -140,7 +140,7 @@ const Dashboard = () => {
                             <Plus size={28} />
                         </div>
                         <h3>Create Room</h3>
-                        <p>Start a new whiteboard session</p>
+                        <p>Start a new DeskBoard session</p>
                     </button>
 
                     <button className="action-card glass-card" onClick={() => setShowJoinModal(true)}>
@@ -207,7 +207,7 @@ const Dashboard = () => {
                                 type="text"
                                 value={roomName}
                                 onChange={e => setRoomName(e.target.value)}
-                                placeholder="My Whiteboard"
+                                placeholder="My DeskBoard"
                                 className="input-field"
                                 maxLength={100}
                             />

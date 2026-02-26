@@ -10,10 +10,12 @@ import ChatPanel from '../components/ChatPanel';
 import OnlineUsers from '../components/OnlineUsers';
 import FileUpload from '../components/FileUpload';
 import ScreenShare from '../components/ScreenShare';
+import VideoGrid from '../components/VideoGrid';
 import {
     LogOut, Copy, Check, Users, Sun, Moon, Save, Download,
     Share2, MessageCircle, PanelRightClose, PanelRightOpen,
-    FileImage, FileText, X, GripVertical, Settings
+    FileImage, FileText, X, GripVertical, Settings,
+    Video, VideoOff, Mic, MicOff, Layout, Presentation
 } from 'lucide-react';
 import './WhiteboardRoom.css';
 
@@ -44,6 +46,12 @@ const WhiteboardRoom = () => {
     const [messages, setMessages] = useState([]);
     const [sharedFiles, setSharedFiles] = useState([]);
     const [notification, setNotification] = useState('');
+    const [canvasOpen, setCanvasOpen] = useState(false);
+    const [cameraOn, setCameraOn] = useState(false);
+    const [micOn, setMicOn] = useState(false);
+    const [canEdit, setCanEdit] = useState(false);
+    const [canPresent, setCanPresent] = useState(false);
+    const [activePresenterId, setActivePresenterId] = useState(null);
     const canvasRef = useRef(null);
 
     const [chatEnabled, setChatEnabled] = useState(true);
@@ -101,6 +109,7 @@ const WhiteboardRoom = () => {
             setChatEnabled(settings.chatEnabled);
             setEntryMode(settings.entryMode);
             if (settings.boardTheme) setBoardTheme(settings.boardTheme);
+            if (settings.activePresenterId) setActivePresenterId(settings.activePresenterId);
         });
 
         socket.on('chat-toggled', ({ enabled }) => {
@@ -137,6 +146,18 @@ const WhiteboardRoom = () => {
             setWaitingApproval(false);
             navigate('/dashboard');
             alert('The host denied your join request.');
+        });
+
+        socket.on('board-status-update', ({ open, actor, actorId }) => {
+            setCanvasOpen(open);
+            setActivePresenterId(open ? actorId : null);
+            if (open) showNotification(`${actor} started presenting`);
+            else showNotification(`${actor} stopped presenting`);
+        });
+
+        socket.on('permissions-updated', ({ canEdit, canPresent }) => {
+            setCanEdit(canEdit);
+            setCanPresent(canPresent);
         });
 
         socket.on('chat-disabled', () => {
@@ -182,6 +203,8 @@ const WhiteboardRoom = () => {
             socket.off('join-approved');
             socket.off('board-theme-change');
             socket.off('join-rejected');
+            socket.off('board-status-update');
+            socket.off('permissions-updated');
             socket.off('chat-disabled');
             socket.off('new-poll');
             socket.off('poll-update');
@@ -221,7 +244,7 @@ const WhiteboardRoom = () => {
             const dataUrl = canvasRef.current.toDataURL?.();
             if (dataUrl) {
                 const link = document.createElement('a');
-                link.download = `whiteboard-${roomId}.png`;
+                link.download = `deskboard-${roomId}.png`;
                 link.href = dataUrl;
                 link.click();
             }
@@ -284,7 +307,7 @@ const WhiteboardRoom = () => {
 
     const shareRoom = () => {
         const url = window.location.href;
-        navigator.clipboard.writeText(`Join my whiteboard! Room ID: ${roomId}\n${url}`);
+        navigator.clipboard.writeText(`Join my DeskBoard! Room ID: ${roomId}\n${url}`);
         showNotification('Room link copied!');
     };
 
@@ -293,6 +316,27 @@ const WhiteboardRoom = () => {
         if (socket) {
             socket.emit('board-theme-change', { roomId, theme: newTheme });
         }
+    };
+
+    const toggleCanvas = () => {
+        if (!isHost && !canPresent) {
+            showNotification('You do not have permission to present.');
+            return;
+        }
+
+        // If board is open, only the presenter (or host) can close it
+        if (canvasOpen && activePresenterId && activePresenterId !== socket.id && !isHost) {
+            showNotification('Only the presenter can stop the presentation.');
+            return;
+        }
+
+        const newState = !canvasOpen;
+        setCanvasOpen(newState);
+        if (socket) socket.emit('toggle-board', { roomId, open: newState });
+    };
+
+    const handleUpdatePermission = (targetSocketId, permissions) => {
+        if (socket) socket.emit('update-permissions', { roomId, targetSocketId, permissions });
     };
 
     const openSidebar = (tab) => {
@@ -444,39 +488,56 @@ const WhiteboardRoom = () => {
             </header>
 
             <div className="wb-body">
-                {/* Left Toolbar */}
-                <Toolbar
-                    tool={tool}
-                    setTool={setTool}
-                    color={color}
-                    setColor={setColor}
-                    brushSize={brushSize}
-                    setBrushSize={setBrushSize}
-                    lineStyle={lineStyle}
-                    setLineStyle={setLineStyle}
-                    fillEnabled={fillEnabled}
-                    setFillEnabled={setFillEnabled}
-                    onUndo={handleUndo}
-                    onRedo={handleRedo}
-                    onClear={handleClear}
-                    isHost={isHost}
-                    boardTheme={boardTheme}
-                    setBoardTheme={handleBoardThemeChange}
-                />
-
-                {/* Center: Canvas */}
-                <div className={`wb-canvas-area theme-${boardTheme}`}>
-                    <Canvas
-                        ref={canvasRef}
+                {/* Left Toolbar - Only visible when canvas is open */}
+                {canvasOpen && (
+                    <Toolbar
                         tool={tool}
+                        setTool={setTool}
                         color={color}
+                        setColor={setColor}
                         brushSize={brushSize}
+                        setBrushSize={setBrushSize}
                         lineStyle={lineStyle}
+                        setLineStyle={setLineStyle}
                         fillEnabled={fillEnabled}
-                        socket={socket}
-                        roomId={roomId}
+                        setFillEnabled={setFillEnabled}
+                        onUndo={handleUndo}
+                        onRedo={handleRedo}
+                        onClear={handleClear}
+                        isHost={isHost}
                         boardTheme={boardTheme}
+                        setBoardTheme={handleBoardThemeChange}
+                        readOnly={!canEdit && !isHost}
                     />
+                )}
+
+                {/* Center: Canvas or Meeting (Both always mounted for sync/connectivity) */}
+                <div className={`wb-center-area ${canvasOpen ? 'canvas-mode' : 'meeting-mode'}`}>
+                    <div className={`wb-video-wrapper ${canvasOpen ? 'hidden' : ''}`}>
+                        <VideoGrid
+                            socket={socket}
+                            roomId={roomId}
+                            user={user}
+                            cameraOn={cameraOn}
+                            micOn={micOn}
+                            onlineUsers={onlineUsers}
+                        />
+                    </div>
+
+                    <div className={`wb-canvas-area theme-${boardTheme} ${!canvasOpen ? 'hidden' : ''}`}>
+                        <Canvas
+                            ref={canvasRef}
+                            tool={tool}
+                            color={color}
+                            brushSize={brushSize}
+                            lineStyle={lineStyle}
+                            fillEnabled={fillEnabled}
+                            socket={socket}
+                            roomId={roomId}
+                            boardTheme={boardTheme}
+                            readOnly={!canEdit && !isHost}
+                        />
+                    </div>
                 </div>
 
                 {/* Right Sidebar */}
@@ -537,6 +598,7 @@ const WhiteboardRoom = () => {
                                         onMuteToggle={() => setIsMuted(prev => !prev)}
                                         pendingUsers={pendingUsers}
                                         onJoinResponse={handleJoinResponse}
+                                        onUpdatePermission={handleUpdatePermission}
                                     />
                                 )}
                                 {sidebarTab === 'files' && (
@@ -593,10 +655,51 @@ const WhiteboardRoom = () => {
 
             {/* Bottom Bar */}
             <footer className="wb-bottombar glass-card">
-                <ScreenShare socket={socket} roomId={roomId} />
-                <button className="btn-icon" onClick={toggleTheme} title="Toggle Theme">
-                    {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-                </button>
+                <div className="bottom-left">
+                    <ScreenShare socket={socket} roomId={roomId} />
+                </div>
+
+                <div className="bottom-center">
+                    <button
+                        className={`btn-control ${!micOn ? 'off' : ''}`}
+                        onClick={() => setMicOn(!micOn)}
+                        title={micOn ? 'Mute' : 'Unmute'}
+                    >
+                        {micOn ? <Mic size={20} /> : <MicOff size={20} />}
+                    </button>
+
+                    <button
+                        className={`btn-control ${!cameraOn ? 'off' : ''}`}
+                        onClick={() => setCameraOn(!cameraOn)}
+                        title={cameraOn ? 'Turn Camera Off' : 'Turn Camera On'}
+                    >
+                        {cameraOn ? <Video size={20} /> : <VideoOff size={20} />}
+                    </button>
+
+                    <div className="control-divider" />
+
+                    <button
+                        className={`btn-control ${canvasOpen ? 'active' : ''} ${(!canPresent && !isHost) ? 'disabled' : ''}`}
+                        onClick={toggleCanvas}
+                        title={canvasOpen
+                            ? (activePresenterId && activePresenterId !== socket.id && !isHost ? 'Only the presenter can stop' : 'Stop Presenting')
+                            : 'Open Whiteboard'}
+                        disabled={(!canPresent && !isHost) || (canvasOpen && activePresenterId && activePresenterId !== socket.id && !isHost)}
+                    >
+                        {canvasOpen ? <Presentation size={20} /> : <Layout size={20} />}
+                        <span className="control-label">
+                            {canvasOpen
+                                ? (activePresenterId && activePresenterId !== socket.id && !isHost ? 'Someone else is Presenting' : 'Stop Presenting')
+                                : 'Open Board'}
+                        </span>
+                    </button>
+                </div>
+
+                <div className="bottom-right">
+                    <button className="btn-icon" onClick={toggleTheme} title="Toggle Theme">
+                        {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                    </button>
+                </div>
             </footer>
 
             {/* Leave Modal */}
@@ -620,7 +723,7 @@ const WhiteboardRoom = () => {
             {showSaveModal && (
                 <div className="modal-overlay" onClick={() => setShowSaveModal(false)}>
                     <div className="modal-content animate-scale-in" onClick={e => e.stopPropagation()}>
-                        <h2 className="modal-title">Save Whiteboard</h2>
+                        <h2 className="modal-title">Save DeskBoard</h2>
                         <div className="save-options">
                             <button className="action-card glass-card" onClick={handleSaveImage}>
                                 <Download size={24} />

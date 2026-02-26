@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
     Pencil, Eraser, Undo2, Redo2, Trash2,
     Minus, MoveRight, Square, Circle, Triangle, Diamond,
-    PaintBucket, ChevronDown, Palette, Type
+    PaintBucket, ChevronDown, Palette, Type, Lock
 } from 'lucide-react';
 import './Toolbar.css';
 
@@ -28,7 +28,7 @@ const SHAPE_TOOLS = [
 ];
 
 const BOARD_THEMES = [
-    { id: 'whiteboard', label: 'Whiteboard', color: '#ffffff', border: '#ccc', defaultDraw: '#000000', chalk: false },
+    { id: 'whiteboard', label: 'DeskBoard', color: '#ffffff', border: '#ccc', defaultDraw: '#000000', chalk: false },
     { id: 'blackboard', label: 'Blackboard', color: '#2c2c2c', border: '#b8944a', defaultDraw: '#e0e0e0', chalk: true },
     { id: 'nostalgic', label: 'Nostalgic', color: '#1f5a2d', border: '#b8944a', defaultDraw: '#f5f5dc', chalk: true }
 ];
@@ -37,7 +37,7 @@ const Toolbar = ({
     tool, setTool, color, setColor, brushSize, setBrushSize,
     lineStyle, setLineStyle, fillEnabled, setFillEnabled,
     onUndo, onRedo, onClear, isHost,
-    boardTheme, setBoardTheme
+    boardTheme, setBoardTheme, readOnly = false
 }) => {
     const [shapesExpanded, setShapesExpanded] = useState(false);
     const [styleExpanded, setStyleExpanded] = useState(false);
@@ -46,13 +46,19 @@ const Toolbar = ({
     const isShapeActive = ['line', 'arrow', 'rect', 'circle', 'triangle', 'diamond'].includes(tool);
 
     return (
-        <div className="toolbar glass-card">
+        <div className={`toolbar glass-card ${readOnly ? 'toolbar-readonly' : ''}`}>
+            {readOnly && (
+                <div className="toolbar-lock-indicator" title="Drawing is disabled by host">
+                    <Lock size={12} style={{ color: 'var(--accent)' }} />
+                </div>
+            )}
             {/* Drawing Tools */}
             <div className="tool-group">
                 <button
                     className={`btn-icon ${tool === 'pencil' ? 'active' : ''}`}
                     onClick={() => setTool('pencil')}
                     title="Pencil"
+                    disabled={readOnly}
                 >
                     <Pencil size={18} />
                 </button>
@@ -60,6 +66,7 @@ const Toolbar = ({
                     className={`btn-icon ${tool === 'eraser' ? 'active' : ''}`}
                     onClick={() => setTool('eraser')}
                     title="Eraser"
+                    disabled={readOnly}
                 >
                     <Eraser size={18} />
                 </button>
@@ -67,6 +74,7 @@ const Toolbar = ({
                     className={`btn-icon ${tool === 'text' ? 'active' : ''}`}
                     onClick={() => setTool('text')}
                     title="Text"
+                    disabled={readOnly}
                 >
                     <Type size={18} />
                 </button>
@@ -77,6 +85,7 @@ const Toolbar = ({
                 <button
                     className={`section-toggle ${isShapeActive ? 'active' : ''}`}
                     onClick={() => setShapesExpanded(!shapesExpanded)}
+                    disabled={readOnly}
                 >
                     <span className="tool-label">Shapes</span>
                     <ChevronDown size={10} className={`toggle-arrow ${shapesExpanded ? 'open' : ''}`} />
@@ -89,6 +98,7 @@ const Toolbar = ({
                                 className={`btn-icon btn-sm ${tool === s.id ? 'active' : ''}`}
                                 onClick={() => setTool(s.id)}
                                 title={s.label}
+                                disabled={readOnly}
                             >
                                 <s.icon size={14} />
                             </button>
@@ -102,6 +112,7 @@ const Toolbar = ({
                 <button
                     className={`section-toggle ${styleExpanded ? 'section-open' : ''}`}
                     onClick={() => setStyleExpanded(!styleExpanded)}
+                    disabled={readOnly}
                 >
                     <span className="tool-label">Style</span>
                     <ChevronDown size={10} className={`toggle-arrow ${styleExpanded ? 'open' : ''}`} />
@@ -114,6 +125,7 @@ const Toolbar = ({
                                 className={`btn-linestyle ${lineStyle === ls.id ? 'active' : ''}`}
                                 onClick={() => setLineStyle(ls.id)}
                                 title={ls.label}
+                                disabled={readOnly}
                             >
                                 <svg width="32" height="8" viewBox="0 0 32 8">
                                     <line
@@ -133,6 +145,7 @@ const Toolbar = ({
                             className={`btn-icon btn-sm ${fillEnabled ? 'active' : ''}`}
                             onClick={() => setFillEnabled(!fillEnabled)}
                             title={fillEnabled ? 'Fill On' : 'Fill Off'}
+                            disabled={readOnly}
                         >
                             <PaintBucket size={14} />
                         </button>
@@ -151,6 +164,7 @@ const Toolbar = ({
                             style={{ background: c }}
                             onClick={() => setColor(c)}
                             title={c}
+                            disabled={readOnly}
                         />
                     ))}
                 </div>
@@ -161,6 +175,7 @@ const Toolbar = ({
                         onChange={e => setColor(e.target.value)}
                         className="color-input"
                         title="Custom Color"
+                        disabled={readOnly}
                     />
                 </div>
             </div>
@@ -175,6 +190,7 @@ const Toolbar = ({
                     value={brushSize}
                     onChange={e => setBrushSize(Number(e.target.value))}
                     className="size-slider"
+                    disabled={readOnly}
                 />
                 <div className="size-preview" style={{ width: brushSize, height: brushSize }} />
             </div>
@@ -184,6 +200,7 @@ const Toolbar = ({
                 <button
                     className={`section-toggle ${themeExpanded ? 'section-open' : ''}`}
                     onClick={() => setThemeExpanded(!themeExpanded)}
+                    disabled={readOnly}
                 >
                     <Palette size={12} />
                     <span className="tool-label">Theme</span>
@@ -207,6 +224,7 @@ const Toolbar = ({
                                     }
                                 }}
                                 title={t.label}
+                                disabled={readOnly}
                             >
                                 <span
                                     className="theme-dot"
@@ -220,10 +238,10 @@ const Toolbar = ({
 
             {/* History */}
             <div className="tool-group">
-                <button className="btn-icon" onClick={onUndo} title="Undo">
+                <button className="btn-icon" onClick={onUndo} title="Undo" disabled={readOnly}>
                     <Undo2 size={18} />
                 </button>
-                <button className="btn-icon" onClick={onRedo} title="Redo">
+                <button className="btn-icon" onClick={onRedo} title="Redo" disabled={readOnly}>
                     <Redo2 size={18} />
                 </button>
             </div>
@@ -231,7 +249,7 @@ const Toolbar = ({
             {/* Clear */}
             {isHost && (
                 <div className="tool-group">
-                    <button className="btn-icon btn-clear" onClick={onClear} title="Clear Board (Host Only)">
+                    <button className="btn-icon btn-clear" onClick={onClear} title="Clear Board (Host Only)" disabled={readOnly}>
                         <Trash2 size={18} />
                     </button>
                 </div>

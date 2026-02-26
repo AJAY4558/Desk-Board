@@ -92,7 +92,7 @@ const Register = () => {
                                 </defs>
                             </svg>
                         </div>
-                        <span className="logo-text">CollabBoard</span>
+                        <span className="logo-text">DeskBoard</span>
                     </div>
                     <h1 className="auth-title">Create account</h1>
                     <p className="auth-subtitle">Start collaborating in real-time</p>
