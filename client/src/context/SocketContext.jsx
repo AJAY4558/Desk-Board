@@ -14,7 +14,7 @@ export const SocketProvider = ({ children }) => {
     const [connected, setConnected] = useState(false);
 
     useEffect(() => {
-        const newSocket = io('http://localhost:5000', {
+        const newSocket = io('https://desk-board-backend.onrender.com', {
             autoConnect: false,
             reconnection: true,
             reconnectionAttempts: 5,

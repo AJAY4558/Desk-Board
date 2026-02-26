@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://desk-board-backend.onrender.com/api';
 
 const getHeaders = () => {
     const token = localStorage.getItem('token');

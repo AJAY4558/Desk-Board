@@ -636,14 +636,14 @@ const WhiteboardRoom = () => {
                                                             if (isImage) {
                                                                 e.dataTransfer.setData('application/json', JSON.stringify({
                                                                     type: 'image',
-                                                                    url: `http://localhost:5000${f.url}`
+                                                                    url: `https://desk-board-backend.onrender.com${f.url}`
                                                                 }));
                                                             }
                                                         }}
                                                     >
                                                         {isImage && (
                                                             <img
-                                                                src={`http://localhost:5000${f.url}`}
+                                                                src={`https://desk-board-backend.onrender.com${f.url}`}
                                                                 alt={f.originalName}
                                                                 className="file-preview"
                                                             />
@@ -655,7 +655,7 @@ const WhiteboardRoom = () => {
                                                             </span>
                                                         </div>
                                                         <a
-                                                            href={`http://localhost:5000${f.url}`}
+                                                            href={`https://desk-board-backend.onrender.com${f.url}`}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
                                                             className="btn-icon"
