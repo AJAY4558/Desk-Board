@@ -1,4 +1,4 @@
-import { Crown, X, VolumeX, Volume2, Check, XCircle, Pencil, Presentation, ShieldAlert } from 'lucide-react';
+import { Crown, X, VolumeX, Volume2, Check, XCircle, Pencil, Presentation, ShieldAlert, Video } from 'lucide-react';
 import './OnlineUsers.css';
 
 const OnlineUsers = ({ users, hostId, currentUserId, isHost, onKick, isMuted, onMuteToggle, pendingUsers, onJoinResponse, onUpdatePermission }) => {
@@ -68,17 +68,24 @@ const OnlineUsers = ({ users, hostId, currentUserId, isHost, onKick, isMuted, on
                                 <div className="permission-toggles">
                                     <button
                                         className={`btn-perm ${u.canEdit ? 'active' : ''}`}
-                                        onClick={() => onUpdatePermission(u.socketId, { canEdit: !u.canEdit, canPresent: u.canPresent })}
+                                        onClick={() => onUpdatePermission(u.socketId, { canEdit: !u.canEdit, canPresent: u.canPresent, canUseMedia: u.canUseMedia })}
                                         title={u.canEdit ? 'Revoke Edit' : 'Grant Edit'}
                                     >
                                         <Pencil size={12} />
                                     </button>
                                     <button
                                         className={`btn-perm ${u.canPresent ? 'active' : ''}`}
-                                        onClick={() => onUpdatePermission(u.socketId, { canEdit: u.canEdit, canPresent: !u.canPresent })}
+                                        onClick={() => onUpdatePermission(u.socketId, { canEdit: u.canEdit, canPresent: !u.canPresent, canUseMedia: u.canUseMedia })}
                                         title={u.canPresent ? 'Revoke Present' : 'Grant Present'}
                                     >
                                         <Presentation size={12} />
+                                    </button>
+                                    <button
+                                        className={`btn-perm ${u.canUseMedia ? 'active' : ''}`}
+                                        onClick={() => onUpdatePermission(u.socketId, { canEdit: u.canEdit, canPresent: u.canPresent, canUseMedia: !u.canUseMedia })}
+                                        title={u.canUseMedia ? 'Revoke Camera/Mic' : 'Grant Camera/Mic'}
+                                    >
+                                        <Video size={12} />
                                     </button>
                                 </div>
                             )}
@@ -93,10 +100,11 @@ const OnlineUsers = ({ users, hostId, currentUserId, isHost, onKick, isMuted, on
                                 </button>
                             )}
 
-                            {!isHost && u._id !== currentUserId && (u.canEdit || u.canPresent) && (
+                            {!isHost && u._id !== currentUserId && (u.canEdit || u.canPresent || u.canUseMedia) && (
                                 <div className="user-perms-badges">
                                     {u.canEdit && <Pencil size={10} className="perm-badge-icon" title="Can Edit" />}
                                     {u.canPresent && <Presentation size={10} className="perm-badge-icon" title="Can Present" />}
+                                    {u.canUseMedia && <Video size={10} className="perm-badge-icon" title="Can use Camera/Mic" />}
                                 </div>
                             )}
                         </div>

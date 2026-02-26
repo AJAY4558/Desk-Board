@@ -122,6 +122,10 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
             performRedo();
         };
 
+        const handleImage = (data) => {
+            drawDroppedImage(data.url, data.x, data.y, false);
+        };
+
         socket.on('draw', handleDraw);
         socket.on('erase', handleErase);
         socket.on('shape', handleShape);
@@ -129,6 +133,7 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
         socket.on('text', handleText);
         socket.on('undo', handleUndoEvent);
         socket.on('redo', handleRedoEvent);
+        socket.on('image', handleImage);
 
         return () => {
             socket.off('draw', handleDraw);
@@ -138,6 +143,7 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
             socket.off('text', handleText);
             socket.off('undo', handleUndoEvent);
             socket.off('redo', handleRedoEvent);
+            socket.off('image', handleImage);
         };
     }, [socket]); // FIXED: Removed history and historyIndex from dependencies
 
@@ -373,6 +379,81 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
         setTextInput(null);
     };
 
+    const drawDroppedImage = useCallback((url, centerX, centerY, emit = false) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.onload = () => {
+            const ctx = ctxRef.current;
+            if (!ctx) return;
+
+            let width = img.width;
+            let height = img.height;
+            const maxW = 400;
+            const maxH = 400;
+
+            if (width > maxW) {
+                height = (height * maxW) / width;
+                width = maxW;
+            }
+            if (height > maxH) {
+                width = (width * maxH) / height;
+                height = maxH;
+            }
+
+            const finalX = centerX - width / 2;
+            const finalY = centerY - height / 2;
+
+            ctx.drawImage(img, finalX, finalY, width, height);
+
+            // Wait a tick to ensure the canvas has updated its pixels before saving state
+            setTimeout(() => {
+                saveState();
+                if (emit && socket) {
+                    socket.emit('image', { roomId, url, x: centerX, y: centerY });
+
+                    // Force a canvas-update emit incase the other clients join late
+                    const dpr = window.devicePixelRatio || 1;
+                    const canvas = canvasRef.current;
+                    if (canvas) {
+                        const canvasData = history.slice(0, historyIndex + 1);
+                        socket.emit('canvas-update', { roomId, canvasData });
+                    }
+                }
+            }, 0);
+        };
+        img.src = url;
+    }, [roomId, socket, saveState, history, historyIndex]);
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        if (readOnly) return;
+
+        const coords = getCoords(e);
+        let imageUrl = null;
+
+        try {
+            const data = e.dataTransfer.getData('application/json');
+            if (data) {
+                const parsed = JSON.parse(data);
+                if (parsed.type === 'image') imageUrl = parsed.url;
+            }
+        } catch (err) { }
+
+        if (!imageUrl && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (ev) => drawDroppedImage(ev.target.result, coords.x, coords.y, true);
+                reader.readAsDataURL(file);
+                return;
+            }
+        }
+
+        if (imageUrl) {
+            drawDroppedImage(imageUrl, coords.x, coords.y, true);
+        }
+    };
+
     const clearPreview = () => {
         const preview = previewRef.current;
         const pctx = previewCtxRef.current;
@@ -524,6 +605,8 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
                 onMouseMove={draw}
                 onMouseUp={stopDrawing}
                 onMouseLeave={stopDrawing}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop}
             />
             {textInput && (
                 <textarea

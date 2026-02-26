@@ -220,7 +220,7 @@ const VideoGrid = ({ socket, roomId, user, cameraOn, micOn, onlineUsers }) => {
     // Unified list of participants for grid/pinning
     const participants = useMemo(() => {
         const list = [
-            { id: 'local', stream: localStreamRef.current, username: user?.username, isLocal: true, streamReady }
+            { id: 'local', stream: localStreamRef.current, username: user?.username, isLocal: true, streamReady, cameraOn, micOn }
         ];
 
         if (onlineUsers) {
@@ -232,13 +232,15 @@ const VideoGrid = ({ socket, roomId, user, cameraOn, micOn, onlineUsers }) => {
                         id: u.socketId,
                         stream: peerData?.stream || null,
                         username: u.username,
-                        isLocal: false
+                        isLocal: false,
+                        cameraOn: u.cameraOn,
+                        micOn: u.micOn
                     });
                 }
             });
         }
         return list;
-    }, [peers, user, streamReady, onlineUsers, socket]);
+    }, [peers, user, streamReady, onlineUsers, socket, cameraOn, micOn]);
 
     const handlePin = (id) => {
         setPinnedId(prev => prev === id ? null : id);
@@ -285,6 +287,8 @@ const VideoGrid = ({ socket, roomId, user, cameraOn, micOn, onlineUsers }) => {
                             username={pic.username}
                             isPinned={pinnedId === pic.id}
                             onPin={() => handlePin(pic.id)}
+                            cameraOn={pic.cameraOn}
+                            micOn={pic.micOn}
                         />
                     )
                 ))}
@@ -313,52 +317,19 @@ const VideoGrid = ({ socket, roomId, user, cameraOn, micOn, onlineUsers }) => {
     );
 };
 
-const RemoteVideo = ({ stream, username, isPinned, onPin }) => {
+const RemoteVideo = ({ stream, username, isPinned, onPin, cameraOn, micOn }) => {
     const videoRef = useRef();
-    const [hasVideo, setHasVideo] = useState(false);
+    const hasVideo = !!stream && cameraOn;
 
     useEffect(() => {
-        if (!stream) {
-            setHasVideo(false);
-            return;
-        }
-
-        if (videoRef.current) {
+        if (videoRef.current && stream) {
             videoRef.current.srcObject = stream;
         }
-
-        const updateStatus = () => {
-            const videoTrack = stream.getVideoTracks()[0];
-            const isEnabled = videoTrack ? videoTrack.enabled : false;
-            setHasVideo(isEnabled);
-        };
-
-        updateStatus();
-        stream.onaddtrack = updateStatus;
-        stream.onremovetrack = updateStatus;
-
-        const interval = setInterval(updateStatus, 2000);
-
-        const videoTrack = stream.getVideoTracks()[0];
-        if (videoTrack) {
-            videoTrack.onmute = () => setHasVideo(false);
-            videoTrack.onunmute = () => setHasVideo(true);
-        }
-
-        return () => {
-            clearInterval(interval);
-            stream.onaddtrack = null;
-            stream.onremovetrack = null;
-            if (videoTrack) {
-                videoTrack.onmute = null;
-                videoTrack.onunmute = null;
-            }
-        };
     }, [stream]);
 
     useEffect(() => {
         const attemptPlay = async () => {
-            if (videoRef.current && videoRef.current.paused && stream) {
+            if (videoRef.current && videoRef.current.paused && hasVideo) {
                 try {
                     await videoRef.current.play();
                 } catch (err) {
@@ -394,7 +365,9 @@ const RemoteVideo = ({ stream, username, isPinned, onPin }) => {
                     {isPinned ? <PinOff size={16} /> : <Pin size={16} />}
                 </button>
             </div>
-            <div className="video-label">{username || 'Guest'}</div>
+            <div className="video-label">
+                {username || 'Guest'} {!micOn && <MicOff size={14} />}
+            </div>
         </div>
     );
 };

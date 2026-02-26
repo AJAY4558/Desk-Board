@@ -51,6 +51,7 @@ const WhiteboardRoom = () => {
     const [micOn, setMicOn] = useState(false);
     const [canEdit, setCanEdit] = useState(false);
     const [canPresent, setCanPresent] = useState(false);
+    const [canUseMedia, setCanUseMedia] = useState(false);
     const [activePresenterId, setActivePresenterId] = useState(null);
     const canvasRef = useRef(null);
 
@@ -63,6 +64,12 @@ const WhiteboardRoom = () => {
     const [waitingApproval, setWaitingApproval] = useState(false);
     const [hasUnreadChat, setHasUnreadChat] = useState(false);
     const [hasUserNotif, setHasUserNotif] = useState(false);
+
+    useEffect(() => {
+        if (socket && roomId) {
+            socket.emit('update-media-status', { roomId, cameraOn, micOn });
+        }
+    }, [cameraOn, micOn, socket, roomId]);
 
     useEffect(() => {
         const loadRoom = async () => {
@@ -155,9 +162,14 @@ const WhiteboardRoom = () => {
             else showNotification(`${actor} stopped presenting`);
         });
 
-        socket.on('permissions-updated', ({ canEdit, canPresent }) => {
+        socket.on('permissions-updated', ({ canEdit, canPresent, canUseMedia }) => {
             setCanEdit(canEdit);
             setCanPresent(canPresent);
+            setCanUseMedia(canUseMedia);
+            if (!canUseMedia && !isHost) {
+                setCameraOn(false);
+                setMicOn(false);
+            }
         });
 
         socket.on('chat-disabled', () => {
@@ -297,11 +309,9 @@ const WhiteboardRoom = () => {
 
     const handleClear = () => {
         if (!isHost) return;
-        if (window.confirm('Clear the entire board? This cannot be undone.')) {
-            if (canvasRef.current?.clear) {
-                canvasRef.current.clear();
-                socket?.emit('clear-board', { roomId, userId: user._id });
-            }
+        if (canvasRef.current?.clear) {
+            canvasRef.current.clear();
+            socket?.emit('clear-board', { roomId, userId: user._id });
         }
     };
 
@@ -618,7 +628,19 @@ const WhiteboardRoom = () => {
                                                 const f = sf.file || sf;
                                                 const isImage = f.mimetype?.startsWith('image/');
                                                 return (
-                                                    <div key={i} className="file-card glass-card">
+                                                    <div
+                                                        key={i}
+                                                        className="file-card glass-card"
+                                                        draggable={isImage}
+                                                        onDragStart={(e) => {
+                                                            if (isImage) {
+                                                                e.dataTransfer.setData('application/json', JSON.stringify({
+                                                                    type: 'image',
+                                                                    url: `http://localhost:5000${f.url}`
+                                                                }));
+                                                            }
+                                                        }}
+                                                    >
                                                         {isImage && (
                                                             <img
                                                                 src={`http://localhost:5000${f.url}`}
@@ -661,17 +683,19 @@ const WhiteboardRoom = () => {
 
                 <div className="bottom-center">
                     <button
-                        className={`btn-control ${!micOn ? 'off' : ''}`}
+                        className={`btn-control ${!micOn ? 'off' : ''} ${(!canUseMedia && !isHost) ? 'disabled' : ''}`}
                         onClick={() => setMicOn(!micOn)}
                         title={micOn ? 'Mute' : 'Unmute'}
+                        disabled={!canUseMedia && !isHost}
                     >
                         {micOn ? <Mic size={20} /> : <MicOff size={20} />}
                     </button>
 
                     <button
-                        className={`btn-control ${!cameraOn ? 'off' : ''}`}
+                        className={`btn-control ${!cameraOn ? 'off' : ''} ${(!canUseMedia && !isHost) ? 'disabled' : ''}`}
                         onClick={() => setCameraOn(!cameraOn)}
                         title={cameraOn ? 'Turn Camera Off' : 'Turn Camera On'}
+                        disabled={!canUseMedia && !isHost}
                     >
                         {cameraOn ? <Video size={20} /> : <VideoOff size={20} />}
                     </button>

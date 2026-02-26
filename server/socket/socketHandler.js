@@ -140,11 +140,13 @@ const socketHandler = (io) => {
             if (targetUser) {
                 targetUser.canEdit = permissions.canEdit;
                 targetUser.canPresent = permissions.canPresent;
+                targetUser.canUseMedia = permissions.canUseMedia;
 
                 // Update specific user
                 io.to(targetSocketId).emit('permissions-updated', {
                     canEdit: targetUser.canEdit,
-                    canPresent: targetUser.canPresent
+                    canPresent: targetUser.canPresent,
+                    canUseMedia: targetUser.canUseMedia
                 });
 
                 // Update everyone's user list to reflect status (optional but good for UI)
@@ -172,6 +174,7 @@ const socketHandler = (io) => {
         socket.on('redo', (data) => socket.to(data.roomId).emit('redo', data));
         socket.on('clear-board', (data) => socket.to(data.roomId).emit('clear-board', data));
         socket.on('text', (data) => socket.to(data.roomId).emit('text', data));
+        socket.on('image', (data) => socket.to(data.roomId).emit('image', data));
         socket.on('board-theme-change', (data) => {
             socket.to(data.roomId).emit('board-theme-change', data);
             Room.findOneAndUpdate({ roomId: data.roomId }, { boardTheme: data.theme }).catch(console.error);
@@ -306,6 +309,17 @@ const socketHandler = (io) => {
             });
         });
 
+        socket.on('update-media-status', ({ roomId, cameraOn, micOn }) => {
+            const users = onlineUsers.get(roomId);
+            if (!users) return;
+            const user = users.get(socket.id);
+            if (user) {
+                user.cameraOn = cameraOn;
+                user.micOn = micOn;
+                io.to(roomId).emit('user-list-update', Array.from(users.values()));
+            }
+        });
+
         socket.on('leave-room', async ({ roomId }) => {
             handleDisconnect(socket, io, roomId);
         });
@@ -331,7 +345,10 @@ const completeJoin = async (socket, io, roomId, user, isHost, room) => {
         socketId: socket.id,
         isHost,
         canEdit: isHost, // Host can always edit
-        canPresent: isHost // Host can always present
+        canPresent: isHost, // Host can always present
+        canUseMedia: isHost, // Host can always use media
+        cameraOn: false,
+        micOn: false
     });
 
     if (isHost) {
@@ -370,7 +387,8 @@ const completeJoin = async (socket, io, roomId, user, isHost, room) => {
     const currentUser = onlineUsers.get(roomId).get(socket.id);
     socket.emit('permissions-updated', {
         canEdit: currentUser.canEdit,
-        canPresent: currentUser.canPresent
+        canPresent: currentUser.canPresent,
+        canUseMedia: currentUser.canUseMedia
     });
 
     const roomPolls = activePolls.get(roomId);
