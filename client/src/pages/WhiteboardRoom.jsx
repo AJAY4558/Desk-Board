@@ -308,7 +308,7 @@ const WhiteboardRoom = () => {
     };
 
     const handleClear = () => {
-        if (!isHost) return;
+        if (!isHost && !canEdit) return;
         if (canvasRef.current?.clear) {
             canvasRef.current.clear();
             socket?.emit('clear-board', { roomId, userId: user._id });
@@ -514,7 +514,6 @@ const WhiteboardRoom = () => {
                         onUndo={handleUndo}
                         onRedo={handleRedo}
                         onClear={handleClear}
-                        onDownload={handleSaveImage}
                         isHost={isHost}
                         boardTheme={boardTheme}
                         setBoardTheme={handleBoardThemeChange}
@@ -718,6 +717,19 @@ const WhiteboardRoom = () => {
                                 : 'Open Board'}
                         </span>
                     </button>
+
+                    {canvasOpen && (
+                        <>
+                            <div className="control-divider" />
+                            <button
+                                className="btn-control"
+                                onClick={handleSaveImage}
+                                title="Download Board Screenshot"
+                            >
+                                <Download size={20} />
+                            </button>
+                        </>
+                    )}
                 </div>
 
                 <div className="bottom-right">
