@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
     Pencil, Eraser, Undo2, Redo2, Trash2,
     Minus, MoveRight, Square, Circle, Triangle, Diamond,
-    PaintBucket, ChevronDown, Palette, Type, Lock
+    PaintBucket, ChevronDown, Palette, Type, Lock, Download
 } from 'lucide-react';
 import './Toolbar.css';
 
@@ -36,7 +36,7 @@ const BOARD_THEMES = [
 const Toolbar = ({
     tool, setTool, color, setColor, brushSize, setBrushSize,
     lineStyle, setLineStyle, fillEnabled, setFillEnabled,
-    onUndo, onRedo, onClear, isHost,
+    onUndo, onRedo, onClear, onDownload, isHost,
     boardTheme, setBoardTheme, readOnly = false
 }) => {
     const [shapesExpanded, setShapesExpanded] = useState(false);
@@ -246,14 +246,17 @@ const Toolbar = ({
                 </button>
             </div>
 
-            {/* Clear */}
-            {isHost && (
-                <div className="tool-group">
+            {/* Clear & Download */}
+            <div className="tool-group">
+                <button className="btn-icon" onClick={onDownload} title="Download Board">
+                    <Download size={18} />
+                </button>
+                {isHost && (
                     <button className="btn-icon btn-clear" onClick={onClear} title="Clear Board (Host Only)" disabled={readOnly}>
                         <Trash2 size={18} />
                     </button>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };

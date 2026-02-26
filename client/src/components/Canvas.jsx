@@ -588,7 +588,31 @@ const Canvas = forwardRef(({ tool, color, brushSize, lineStyle, fillEnabled, soc
         redo: performRedo,
         clear: clearCanvas,
         loadCanvasData,
-        toDataURL: () => canvasRef.current?.toDataURL(),
+        toDataURL: () => {
+            const canvas = canvasRef.current;
+            if (!canvas) return null;
+
+            // Create a temporary canvas
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const ctx = tempCanvas.getContext('2d');
+
+            // Draw background based on theme
+            if (boardTheme === 'blackboard') {
+                ctx.fillStyle = '#2c2c2c';
+            } else if (boardTheme === 'nostalgic') {
+                ctx.fillStyle = '#1f5a2d';
+            } else {
+                ctx.fillStyle = '#ffffff'; // whiteboard
+            }
+            ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+            // Draw original canvas over it
+            ctx.drawImage(canvas, 0, 0);
+
+            return tempCanvas.toDataURL('image/png');
+        },
         getCanvasData: () => history.slice(0, historyIndex + 1)
     }));
 

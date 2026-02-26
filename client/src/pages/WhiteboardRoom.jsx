@@ -514,6 +514,7 @@ const WhiteboardRoom = () => {
                         onUndo={handleUndo}
                         onRedo={handleRedo}
                         onClear={handleClear}
+                        onDownload={handleSaveImage}
                         isHost={isHost}
                         boardTheme={boardTheme}
                         setBoardTheme={handleBoardThemeChange}
