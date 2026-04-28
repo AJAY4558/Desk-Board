@@ -1,10 +1,4 @@
 import User from '../models/User.js';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export const getProfile = async (req, res) => {
     try {
@@ -20,7 +14,6 @@ export const updateProfile = async (req, res) => {
     try {
         const { username, theme } = req.body;
         const user = await User.findById(req.user._id);
-
         if (!user) return res.status(404).json({ message: 'User not found' });
 
         if (username) {
@@ -38,23 +31,28 @@ export const updateProfile = async (req, res) => {
     }
 };
 
-/* ── Avatar Upload ────────────────────────── */
+/* ── Avatar Upload (Base64 stored in MongoDB — no filesystem needed) ── */
 export const uploadAvatar = async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+        const { avatar } = req.body; // base64 data URL string
+
+        if (!avatar) return res.status(400).json({ message: 'No avatar data provided' });
+
+        // Validate it's a base64 image data URL
+        if (!avatar.startsWith('data:image/')) {
+            return res.status(400).json({ message: 'Invalid image format' });
+        }
+
+        // Rough size check: base64 string length * 0.75 ≈ bytes
+        const sizeBytes = (avatar.length * 3) / 4;
+        if (sizeBytes > 2 * 1024 * 1024) { // 2 MB limit
+            return res.status(400).json({ message: 'Image too large. Please use an image under 2 MB.' });
+        }
 
         const user = await User.findById(req.user._id);
         if (!user) return res.status(404).json({ message: 'User not found' });
 
-        // Delete old avatar file from disk if it exists
-        if (user.avatar) {
-            const oldFilePath = path.join(__dirname, '..', user.avatar);
-            if (fs.existsSync(oldFilePath)) {
-                fs.unlinkSync(oldFilePath);
-            }
-        }
-
-        user.avatar = `/uploads/avatars/${req.file.filename}`;
+        user.avatar = avatar;
         const updated = await user.save();
         res.json(updated);
     } catch (error) {
@@ -62,21 +60,14 @@ export const uploadAvatar = async (req, res) => {
     }
 };
 
-/* ── Avatar Delete ────────────────────────── */
+/* ── Avatar Delete ── */
 export const deleteAvatar = async (req, res) => {
     try {
         const user = await User.findById(req.user._id);
         if (!user) return res.status(404).json({ message: 'User not found' });
 
-        if (user.avatar) {
-            const filePath = path.join(__dirname, '..', user.avatar);
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
-            user.avatar = '';
-            await user.save();
-        }
-
+        user.avatar = '';
+        await user.save();
         res.json({ message: 'Avatar removed successfully', avatar: '' });
     } catch (error) {
         res.status(500).json({ message: error.message });

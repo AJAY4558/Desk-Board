@@ -6,6 +6,27 @@ import { userAPI } from '../services/api';
 import { ArrowLeft, User, Mail, Moon, Sun, Save, Loader, Camera, Trash2, Upload, X } from 'lucide-react';
 import './Profile.css';
 
+/* ── Resize & compress image to Base64 using a canvas ── */
+const resizeToBase64 = (file, maxPx = 256, quality = 0.82) =>
+    new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+            const w = Math.round(img.width * scale);
+            const h = Math.round(img.height * scale);
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = url;
+    });
+
 const Profile = () => {
     const { user, updateUser } = useAuth();
     const { theme, setTheme } = useTheme();
@@ -13,14 +34,14 @@ const Profile = () => {
     const fileInputRef = useRef();
 
     const [username, setUsername] = useState('');
-    const [pendingTheme, setPendingTheme] = useState(theme); // local only until Save
+    const [pendingTheme, setPendingTheme] = useState(theme);
     const [loading, setLoading] = useState(false);
     const [avatarLoading, setAvatarLoading] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
 
-    // Preview state for newly selected file (before upload)
-    const [previewFile, setPreviewFile] = useState(null);   // File object
-    const [previewUrl, setPreviewUrl] = useState(null);     // Object URL for <img>
+    // Preview state (before upload)
+    const [previewB64, setPreviewB64] = useState(null); // compressed base64 ready to upload
+    const [previewUrl, setPreviewUrl] = useState(null); // object URL just for display
     const [isDragging, setIsDragging] = useState(false);
 
     useEffect(() => {
@@ -30,10 +51,8 @@ const Profile = () => {
         }
     }, [user]);
 
-    // Clean up object URL when component unmounts or preview changes
-    useEffect(() => {
-        return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
-    }, [previewUrl]);
+    // Clean up preview object URL on unmount
+    useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
     const showMessage = (text, type = 'success') => {
         setMessage({ text, type });
@@ -41,48 +60,47 @@ const Profile = () => {
     };
 
     /* ── Avatar helpers ── */
-    const resolveAvatarSrc = () => {
-        if (previewUrl) return previewUrl;
-        if (user?.avatar) return user.avatar;
-        return null;
-    };
+    const avatarSrc = previewUrl || user?.avatar || null;
 
-    const selectFile = (file) => {
+    const processFile = async (file) => {
         if (!file) return;
         const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         if (!allowed.includes(file.type)) {
-            showMessage('Only JPG, PNG, GIF or WebP images are allowed', 'error');
+            showMessage('Only JPG, PNG, GIF or WebP images allowed', 'error');
             return;
         }
-        if (file.size > 5 * 1024 * 1024) {
-            showMessage('Image must be under 5 MB', 'error');
+        if (file.size > 10 * 1024 * 1024) {
+            showMessage('Please choose an image under 10 MB', 'error');
             return;
         }
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-        setPreviewFile(file);
-        setPreviewUrl(URL.createObjectURL(file));
+        try {
+            // Show instant preview via object URL
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(URL.createObjectURL(file));
+
+            // Compress in the background
+            const b64 = await resizeToBase64(file, 256, 0.82);
+            setPreviewB64(b64);
+        } catch {
+            showMessage('Could not process image', 'error');
+        }
     };
 
-    const handleFileChange = (e) => selectFile(e.target.files?.[0]);
-
-    const handleDrop = (e) => {
-        e.preventDefault();
-        setIsDragging(false);
-        selectFile(e.dataTransfer.files?.[0]);
-    };
+    const handleFileChange = (e) => processFile(e.target.files?.[0]);
+    const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); processFile(e.dataTransfer.files?.[0]); };
 
     const cancelPreview = () => {
         if (previewUrl) URL.revokeObjectURL(previewUrl);
-        setPreviewFile(null);
         setPreviewUrl(null);
+        setPreviewB64(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const handleUpload = async () => {
-        if (!previewFile) return;
+        if (!previewB64) return;
         setAvatarLoading(true);
         try {
-            const updated = await userAPI.uploadAvatar(previewFile);
+            const updated = await userAPI.uploadAvatar(previewB64);
             updateUser({ avatar: updated.avatar });
             cancelPreview();
             showMessage('Profile photo updated!');
@@ -114,7 +132,6 @@ const Profile = () => {
         try {
             const updated = await userAPI.updateProfile({ username, theme: pendingTheme });
             updateUser({ username: updated.username, theme: updated.theme });
-            // Apply theme visually only on confirmed save
             setTheme(pendingTheme);
             showMessage('Profile updated!');
         } catch (err) {
@@ -124,7 +141,6 @@ const Profile = () => {
         }
     };
 
-    const avatarSrc = resolveAvatarSrc();
     const initials = user?.username?.slice(0, 2).toUpperCase() || '??';
 
     return (
@@ -153,7 +169,6 @@ const Profile = () => {
                             ) : (
                                 <div className="avatar-initials">{initials}</div>
                             )}
-                            {/* Camera overlay */}
                             <div className="avatar-overlay">
                                 {avatarLoading
                                     ? <Loader size={22} className="spin" />
@@ -177,7 +192,7 @@ const Profile = () => {
 
                     {/* Avatar action buttons */}
                     <div className="avatar-actions">
-                        {previewFile ? (
+                        {previewB64 ? (
                             <>
                                 <button
                                     className="btn btn-primary btn-sm avatar-btn"
@@ -185,7 +200,7 @@ const Profile = () => {
                                     disabled={avatarLoading}
                                 >
                                     {avatarLoading ? <Loader size={14} className="spin" /> : <Upload size={14} />}
-                                    Upload
+                                    Upload Photo
                                 </button>
                                 <button
                                     className="btn btn-secondary btn-sm avatar-btn"
@@ -218,12 +233,11 @@ const Profile = () => {
                         )}
                     </div>
 
-                    {previewFile && (
-                        <p className="avatar-hint">Drop a new image or click the photo to change</p>
-                    )}
-                    {!previewFile && (
-                        <p className="avatar-hint">Click photo or drag & drop to change · Max 5 MB</p>
-                    )}
+                    <p className="avatar-hint">
+                        {previewB64
+                            ? 'Click "Upload Photo" to save'
+                            : 'Click photo or drag & drop · Auto-resized to 256 px'}
+                    </p>
                 </div>
 
                 {/* Toast */}

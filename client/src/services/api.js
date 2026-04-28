@@ -126,14 +126,11 @@ export const userAPI = {
         return handleResponse(res);
     },
 
-    uploadAvatar: async (file) => {
-        const token = localStorage.getItem('token');
-        const formData = new FormData();
-        formData.append('avatar', file);
+    uploadAvatar: async (base64DataUrl) => {
         const res = await fetchWithRetry(`${API_URL}/users/avatar`, {
             method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-            body: formData
+            headers: getHeaders(),
+            body: JSON.stringify({ avatar: base64DataUrl })
         });
         return handleResponse(res);
     },

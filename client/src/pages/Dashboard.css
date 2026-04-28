@@ -272,15 +272,12 @@
     padding: 4px;
     border: none;
     color: var(--text-tertiary);
-    opacity: 0;
+    opacity: 0.5;
     transition: all 0.2s ease;
 }
 
-.room-card:hover .btn-remove-room {
-    opacity: 1;
-}
-
 .btn-remove-room:hover {
+    opacity: 1;
     color: var(--danger) !important;
     background: var(--danger-soft) !important;
     border-color: transparent !important;
