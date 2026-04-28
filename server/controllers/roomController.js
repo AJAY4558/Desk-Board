@@ -107,3 +107,33 @@ export const saveCanvas = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+export const removeFromHistory = async (req, res) => {
+    try {
+        const room = await Room.findOne({ roomId: req.params.roomId });
+        if (!room) return res.status(404).json({ message: 'Room not found' });
+
+        const userId = req.user._id.toString();
+        const isHost = room.host.toString() === userId;
+
+        if (isHost) {
+            const others = room.participants.filter(p => p.toString() !== userId);
+            if (others.length === 0) {
+                // Only member — delete the room entirely
+                await Room.deleteOne({ _id: room._id });
+                return res.json({ message: 'Room deleted' });
+            }
+            // Transfer host to the next participant, remove self
+            room.host = others[0];
+            room.participants = others;
+        } else {
+            // Just a participant — remove from list
+            room.participants = room.participants.filter(p => p.toString() !== userId);
+        }
+
+        await room.save();
+        res.json({ message: 'Removed from history' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};

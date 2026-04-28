@@ -1,5 +1,5 @@
 import express from 'express';
-import { createRoom, getRoom, joinRoom, getUserRooms, saveCanvas } from '../controllers/roomController.js';
+import { createRoom, getRoom, joinRoom, getUserRooms, saveCanvas, removeFromHistory } from '../controllers/roomController.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -9,5 +9,6 @@ router.get('/user/my-rooms', protect, getUserRooms);
 router.get('/:roomId', protect, getRoom);
 router.post('/:roomId/join', protect, joinRoom);
 router.put('/:roomId/canvas', protect, saveCanvas);
+router.delete('/:roomId/history', protect, removeFromHistory);
 
 export default router;

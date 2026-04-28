@@ -98,6 +98,14 @@ export const roomAPI = {
             body: JSON.stringify({ canvasData })
         });
         return handleResponse(res);
+    },
+
+    removeFromHistory: async (roomId) => {
+        const res = await fetchWithRetry(`${API_URL}/rooms/${roomId}/history`, {
+            method: 'DELETE',
+            headers: getHeaders()
+        });
+        return handleResponse(res);
     }
 };
 

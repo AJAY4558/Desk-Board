@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { roomAPI } from '../services/api';
-import { Plus, LogIn as JoinIcon, LogOut, User, Clock, Users, Copy, Check, Sun, Moon } from 'lucide-react';
+import { Plus, LogIn as JoinIcon, LogOut, User, Clock, Users, Copy, Check, Sun, Moon, Trash2 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import './Dashboard.css';
 
@@ -18,6 +18,8 @@ const Dashboard = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [copied, setCopied] = useState('');
+    const [removingId, setRemovingId] = useState(null); // roomId being removed
+    const [fadingOut, setFadingOut] = useState(null);   // roomId fading out
 
     useEffect(() => {
         loadRooms();
@@ -46,10 +48,7 @@ const Dashboard = () => {
     };
 
     const handleJoinRoom = async () => {
-        if (!joinRoomId.trim()) {
-            setError('Please enter a Room ID');
-            return;
-        }
+        if (!joinRoomId.trim()) { setError('Please enter a Room ID'); return; }
         setLoading(true);
         setError('');
         try {
@@ -62,26 +61,49 @@ const Dashboard = () => {
         }
     };
 
+    const handleRemoveRoom = async (e, roomId) => {
+        e.stopPropagation();
+        if (removingId) return; // prevent double-click
+
+        const isHost = rooms.find(r => r.roomId === roomId)?.host?._id === user?._id;
+        const confirmed = window.confirm(
+            isHost
+                ? 'You are the host. Removing this will delete the room for everyone (or transfer host if others are in it). Continue?'
+                : 'Remove this room from your history?'
+        );
+        if (!confirmed) return;
+
+        setRemovingId(roomId);
+        setFadingOut(roomId);
+
+        // Let the CSS fade-out animation play (300ms), then remove from state
+        setTimeout(async () => {
+            try {
+                await roomAPI.removeFromHistory(roomId);
+                setRooms(prev => prev.filter(r => r.roomId !== roomId));
+            } catch (err) {
+                console.error('Failed to remove room:', err);
+                // Re-show the card if the API call failed
+                setFadingOut(null);
+            } finally {
+                setRemovingId(null);
+            }
+        }, 300);
+    };
+
     const copyRoomId = (roomId) => {
         navigator.clipboard.writeText(roomId);
         setCopied(roomId);
         setTimeout(() => setCopied(''), 2000);
     };
 
-    const handleLogout = () => {
-        logout();
-        navigate('/login');
-    };
+    const handleLogout = () => { logout(); navigate('/login'); };
 
-    const getInitials = (name) => {
-        return name ? name.slice(0, 2).toUpperCase() : '??';
-    };
+    const getInitials = (name) => name ? name.slice(0, 2).toUpperCase() : '??';
 
-    const formatDate = (date) => {
-        return new Date(date).toLocaleDateString('en-US', {
-            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-        });
-    };
+    const formatDate = (date) => new Date(date).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
 
     return (
         <div className="dashboard-page">
@@ -112,7 +134,10 @@ const Dashboard = () => {
                         {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
                     </button>
                     <button className="btn-icon" onClick={() => navigate('/profile')} title="Profile">
-                        <User size={18} />
+                        {user?.avatar
+                            ? <img src={user.avatar} alt="avatar" className="nav-avatar-img" />
+                            : <User size={18} />
+                        }
                     </button>
                     <button className="btn btn-secondary btn-sm" onClick={handleLogout}>
                         <LogOut size={16} />
@@ -125,7 +150,10 @@ const Dashboard = () => {
                 {/* Welcome Section */}
                 <div className="dashboard-welcome animate-slide-up">
                     <div className="welcome-avatar">
-                        <span>{getInitials(user?.username)}</span>
+                        {user?.avatar
+                            ? <img src={user.avatar} alt="avatar" className="welcome-avatar-img" />
+                            : <span>{getInitials(user?.username)}</span>
+                        }
                     </div>
                     <div>
                         <h1 className="welcome-title">Welcome, {user?.username}! 👋</h1>
@@ -136,17 +164,12 @@ const Dashboard = () => {
                 {/* Action Cards */}
                 <div className="action-cards animate-slide-up" style={{ animationDelay: '0.1s' }}>
                     <button className="action-card glass-card" onClick={() => setShowCreateModal(true)}>
-                        <div className="action-icon create-icon">
-                            <Plus size={28} />
-                        </div>
+                        <div className="action-icon create-icon"><Plus size={28} /></div>
                         <h3>Create Room</h3>
                         <p>Start a new DeskBoard session</p>
                     </button>
-
                     <button className="action-card glass-card" onClick={() => setShowJoinModal(true)}>
-                        <div className="action-icon join-icon">
-                            <JoinIcon size={28} />
-                        </div>
+                        <div className="action-icon join-icon"><JoinIcon size={28} /></div>
                         <h3>Join Room</h3>
                         <p>Enter with a Room ID</p>
                     </button>
@@ -161,7 +184,11 @@ const Dashboard = () => {
                         </h2>
                         <div className="rooms-grid">
                             {rooms.map(room => (
-                                <div key={room._id} className="room-card glass-card" onClick={() => navigate(`/room/${room.roomId}`)}>
+                                <div
+                                    key={room._id}
+                                    className={`room-card glass-card ${fadingOut === room.roomId ? 'room-card-removing' : ''}`}
+                                    onClick={() => navigate(`/room/${room.roomId}`)}
+                                >
                                     <div className="room-card-header">
                                         <h4 className="room-name">{room.name}</h4>
                                         <span className="badge badge-accent">{room.roomId}</span>
@@ -181,13 +208,23 @@ const Dashboard = () => {
                                             Host: {room.host?.username}
                                             {room.host?._id === user?._id && ' (You)'}
                                         </span>
-                                        <button
-                                            className="btn-icon btn-copy"
-                                            onClick={(e) => { e.stopPropagation(); copyRoomId(room.roomId); }}
-                                            title="Copy Room ID"
-                                        >
-                                            {copied === room.roomId ? <Check size={14} /> : <Copy size={14} />}
-                                        </button>
+                                        <div className="room-card-actions">
+                                            <button
+                                                className="btn-icon btn-copy"
+                                                onClick={(e) => { e.stopPropagation(); copyRoomId(room.roomId); }}
+                                                title="Copy Room ID"
+                                            >
+                                                {copied === room.roomId ? <Check size={14} /> : <Copy size={14} />}
+                                            </button>
+                                            <button
+                                                className="btn-icon btn-remove-room"
+                                                onClick={(e) => handleRemoveRoom(e, room.roomId)}
+                                                title="Remove from history"
+                                                disabled={removingId === room.roomId}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
