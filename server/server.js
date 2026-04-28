@@ -26,6 +26,7 @@ const server = http.createServer(app);
 
 const allowedOrigins = [
     process.env.CLIENT_URL || 'https://desk-board.onrender.com',
+    'https://desk-board-backend.onrender.com',
     'http://localhost:5173',
     'http://localhost:3000',
 ];
@@ -40,7 +41,7 @@ const io = new Server(server, {
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow requests with no origin (e.g. Postman, curl)
+        // Allow same-origin requests (no Origin header) or listed origins
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
