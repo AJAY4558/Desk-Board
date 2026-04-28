@@ -3,6 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import connectDB from './config/db.js';
@@ -65,11 +66,11 @@ app.get('/api/health', (req, res) => {
 
 socketHandler(io);
 
-// ── Serve React frontend in production ──────────────────────────────────
-if (process.env.NODE_ENV === 'production') {
-    const clientDist = path.join(__dirname, '..', 'client', 'dist');
+// ── Serve React frontend if build exists (production) ───────────────────
+const clientDist = path.join(__dirname, '..', 'client', 'dist');
+if (fs.existsSync(clientDist)) {
     app.use(express.static(clientDist));
-    // Catch-all: send index.html for any non-API route (client-side routing)
+    // Catch-all: send index.html for any non-API route (React Router)
     app.get('*', (req, res) => {
         res.sendFile(path.join(clientDist, 'index.html'));
     });
