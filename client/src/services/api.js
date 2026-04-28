@@ -8,6 +8,22 @@ const getHeaders = () => {
     };
 };
 
+// Retry once on network failure (handles Render free-tier cold start / 429)
+const fetchWithRetry = async (url, options = {}, retries = 1) => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const res = await fetch(url, options);
+            return res;
+        } catch (err) {
+            if (attempt < retries) {
+                await new Promise(r => setTimeout(r, 2000)); // wait 2s then retry
+            } else {
+                throw new Error('Server is starting up or unreachable. Please wait a moment and try again.');
+            }
+        }
+    }
+};
+
 const handleResponse = async (response) => {
     const data = await response.json();
     if (!response.ok) {
@@ -18,7 +34,7 @@ const handleResponse = async (response) => {
 
 export const authAPI = {
     register: async (userData) => {
-        const res = await fetch(`${API_URL}/auth/register`, {
+        const res = await fetchWithRetry(`${API_URL}/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(userData)
@@ -27,7 +43,7 @@ export const authAPI = {
     },
 
     login: async (credentials) => {
-        const res = await fetch(`${API_URL}/auth/login`, {
+        const res = await fetchWithRetry(`${API_URL}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(credentials)
@@ -36,7 +52,7 @@ export const authAPI = {
     },
 
     getMe: async () => {
-        const res = await fetch(`${API_URL}/auth/me`, {
+        const res = await fetchWithRetry(`${API_URL}/auth/me`, {
             headers: getHeaders()
         });
         return handleResponse(res);
@@ -45,7 +61,7 @@ export const authAPI = {
 
 export const roomAPI = {
     create: async (name) => {
-        const res = await fetch(`${API_URL}/rooms`, {
+        const res = await fetchWithRetry(`${API_URL}/rooms`, {
             method: 'POST',
             headers: getHeaders(),
             body: JSON.stringify({ name })
@@ -54,14 +70,14 @@ export const roomAPI = {
     },
 
     get: async (roomId) => {
-        const res = await fetch(`${API_URL}/rooms/${roomId}`, {
+        const res = await fetchWithRetry(`${API_URL}/rooms/${roomId}`, {
             headers: getHeaders()
         });
         return handleResponse(res);
     },
 
     join: async (roomId) => {
-        const res = await fetch(`${API_URL}/rooms/${roomId}/join`, {
+        const res = await fetchWithRetry(`${API_URL}/rooms/${roomId}/join`, {
             method: 'POST',
             headers: getHeaders()
         });
@@ -69,14 +85,14 @@ export const roomAPI = {
     },
 
     getUserRooms: async () => {
-        const res = await fetch(`${API_URL}/rooms/user/my-rooms`, {
+        const res = await fetchWithRetry(`${API_URL}/rooms/user/my-rooms`, {
             headers: getHeaders()
         });
         return handleResponse(res);
     },
 
     saveCanvas: async (roomId, canvasData) => {
-        const res = await fetch(`${API_URL}/rooms/${roomId}/canvas`, {
+        const res = await fetchWithRetry(`${API_URL}/rooms/${roomId}/canvas`, {
             method: 'PUT',
             headers: getHeaders(),
             body: JSON.stringify({ canvasData })
@@ -87,14 +103,14 @@ export const roomAPI = {
 
 export const userAPI = {
     getProfile: async () => {
-        const res = await fetch(`${API_URL}/users/profile`, {
+        const res = await fetchWithRetry(`${API_URL}/users/profile`, {
             headers: getHeaders()
         });
         return handleResponse(res);
     },
 
     updateProfile: async (data) => {
-        const res = await fetch(`${API_URL}/users/profile`, {
+        const res = await fetchWithRetry(`${API_URL}/users/profile`, {
             method: 'PUT',
             headers: getHeaders(),
             body: JSON.stringify(data)
@@ -106,7 +122,7 @@ export const userAPI = {
         const token = localStorage.getItem('token');
         const formData = new FormData();
         formData.append('avatar', file);
-        const res = await fetch(`${API_URL}/users/avatar`, {
+        const res = await fetchWithRetry(`${API_URL}/users/avatar`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: formData
@@ -115,7 +131,7 @@ export const userAPI = {
     },
 
     deleteAvatar: async () => {
-        const res = await fetch(`${API_URL}/users/avatar`, {
+        const res = await fetchWithRetry(`${API_URL}/users/avatar`, {
             method: 'DELETE',
             headers: getHeaders()
         });
@@ -128,7 +144,7 @@ export const fileAPI = {
         const token = localStorage.getItem('token');
         const formData = new FormData();
         formData.append('file', file);
-        const res = await fetch(`${API_URL}/files/upload`, {
+        const res = await fetchWithRetry(`${API_URL}/files/upload`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: formData
