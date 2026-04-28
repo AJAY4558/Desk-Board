@@ -51,8 +51,8 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Static uploads (still useful for any other file types)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/uploads/avatars', express.static(path.join(__dirname, 'uploads', 'avatars')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
@@ -64,6 +64,16 @@ app.get('/api/health', (req, res) => {
 });
 
 socketHandler(io);
+
+// ── Serve React frontend in production ──────────────────────────────────
+if (process.env.NODE_ENV === 'production') {
+    const clientDist = path.join(__dirname, '..', 'client', 'dist');
+    app.use(express.static(clientDist));
+    // Catch-all: send index.html for any non-API route (client-side routing)
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(clientDist, 'index.html'));
+    });
+}
 
 app.use(errorHandler);
 
