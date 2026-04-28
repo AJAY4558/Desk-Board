@@ -14,7 +14,8 @@ export const SocketProvider = ({ children }) => {
     const [connected, setConnected] = useState(false);
 
     useEffect(() => {
-        const newSocket = io('https://desk-board-backend.onrender.com', {
+        const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+        const newSocket = io(socketUrl, {
             autoConnect: false,
             reconnection: true,
             reconnectionAttempts: 5,

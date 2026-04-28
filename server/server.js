@@ -23,22 +23,36 @@ connectDB();
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = [
+    process.env.CLIENT_URL || 'https://desk-board.onrender.com',
+    'http://localhost:5173',
+    'http://localhost:3000',
+];
+
 const io = new Server(server, {
     cors: {
-        origin: process.env.CLIENT_URL || 'https://desk-board.onrender.com',
+        origin: allowedOrigins,
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
         credentials: true
     }
 });
 
 app.use(cors({
-    origin: process.env.CLIENT_URL || 'https://desk-board.onrender.com',
+    origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. Postman, curl)
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error(`CORS blocked: ${origin}`));
+        }
+    },
     credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads/avatars', express.static(path.join(__dirname, 'uploads', 'avatars')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);

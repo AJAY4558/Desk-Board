@@ -63,10 +63,19 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
     };
 
+    // Merge partial updates into the in-memory user and localStorage
+    const updateUser = (partial) => {
+        setUser(prev => {
+            const updated = { ...prev, ...partial };
+            localStorage.setItem('user', JSON.stringify(updated));
+            return updated;
+        });
+    };
+
     const clearError = () => setError('');
 
     return (
-        <AuthContext.Provider value={{ user, loading, error, register, login, logout, clearError }}>
+        <AuthContext.Provider value={{ user, loading, error, register, login, logout, updateUser, clearError }}>
             {children}
         </AuthContext.Provider>
     );

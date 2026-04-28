@@ -25,6 +25,7 @@
     margin-bottom: 24px;
 }
 
+/* ── Profile Header ─────────────────────── */
 .profile-header {
     display: flex;
     flex-direction: column;
@@ -33,22 +34,134 @@
     margin-bottom: 28px;
 }
 
-.profile-avatar {
-    width: 72px;
-    height: 72px;
-    border-radius: var(--radius-xl);
+/* ── Avatar Upload Zone ─────────────────── */
+.avatar-upload-zone {
+    position: relative;
+    padding: 6px;
+    border-radius: 50%;
+    border: 2px dashed transparent;
+    transition: border-color 0.25s ease;
+    cursor: pointer;
+}
+
+.avatar-upload-zone.dragging {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.avatar-frame {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow:
+        0 0 0 3px var(--glass-border),
+        0 8px 32px rgba(0, 0, 0, 0.3);
+    transition: box-shadow 0.25s ease;
+}
+
+.avatar-frame:hover {
+    box-shadow:
+        0 0 0 3px var(--accent),
+        0 8px 32px rgba(108, 92, 231, 0.3);
+}
+
+.avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.avatar-initials {
+    width: 100%;
+    height: 100%;
     background: var(--gradient-primary);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.5rem;
+    font-size: 1.8rem;
     font-weight: 700;
     color: white;
+    user-select: none;
 }
 
+/* Camera hover overlay */
+.avatar-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    border-radius: 50%;
+}
+
+.avatar-frame:hover .avatar-overlay {
+    opacity: 1;
+}
+
+/* Hidden file input */
+.avatar-file-input {
+    display: none;
+}
+
+/* ── Avatar action buttons ──────────────── */
+.avatar-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 4px;
+}
+
+.avatar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    padding: 6px 14px;
+    border-radius: 8px;
+}
+
+.btn-danger {
+    background: rgba(235, 77, 75, 0.15);
+    color: #eb4d4b;
+    border: 1px solid rgba(235, 77, 75, 0.3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: rgba(235, 77, 75, 0.25);
+    transform: translateY(-1px);
+}
+
+.btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.avatar-hint {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    text-align: center;
+    margin-top: 2px;
+}
+
+/* ── Title + Email ──────────────────────── */
 .profile-title {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     font-weight: 700;
+    margin-top: 4px;
 }
 
 .profile-email {
@@ -59,6 +172,7 @@
     font-size: 0.85rem;
 }
 
+/* ── Profile Form ───────────────────────── */
 .profile-form {
     display: flex;
     flex-direction: column;
@@ -103,6 +217,7 @@
     margin-top: 4px;
 }
 
+/* ── Toast inline ───────────────────────── */
 .toast-inline {
     padding: 10px 16px;
     border-radius: var(--radius-md);
@@ -124,6 +239,7 @@
     border: 1px solid rgba(255, 75, 110, 0.2);
 }
 
+/* ── Form helpers ───────────────────────── */
 .form-group {
     display: flex;
     flex-direction: column;
@@ -155,16 +271,17 @@
     padding-left: 42px !important;
 }
 
+.btn-sm {
+    padding: 6px 14px;
+    font-size: 0.8rem;
+}
+
+/* ── Spinner ────────────────────────────── */
 .spin {
-    animation: spin 1s linear infinite;
+    animation: spin 0.9s linear infinite;
 }
 
 @keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
 }

@@ -1,4 +1,4 @@
-const API_URL = 'https://desk-board-backend.onrender.com/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const getHeaders = () => {
     const token = localStorage.getItem('token');
@@ -98,6 +98,26 @@ export const userAPI = {
             method: 'PUT',
             headers: getHeaders(),
             body: JSON.stringify(data)
+        });
+        return handleResponse(res);
+    },
+
+    uploadAvatar: async (file) => {
+        const token = localStorage.getItem('token');
+        const formData = new FormData();
+        formData.append('avatar', file);
+        const res = await fetch(`${API_URL}/users/avatar`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData
+        });
+        return handleResponse(res);
+    },
+
+    deleteAvatar: async () => {
+        const res = await fetch(`${API_URL}/users/avatar`, {
+            method: 'DELETE',
+            headers: getHeaders()
         });
         return handleResponse(res);
     }
