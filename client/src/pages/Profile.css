@@ -21,6 +21,12 @@
     z-index: 1;
 }
 
+[data-theme="light"] .profile-container {
+    background: rgba(255, 255, 255, 0.97);
+    border-color: rgba(108, 92, 231, 0.12);
+    box-shadow: 0 8px 40px rgba(108, 92, 231, 0.10), 0 2px 12px rgba(0,0,0,0.05);
+}
+
 .back-btn {
     margin-bottom: 24px;
 }

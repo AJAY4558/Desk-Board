@@ -2,14 +2,24 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layers, ArrowRight, CheckCircle2, Zap, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import './Landing.css';
 
 export default function Landing() {
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { theme, setTheme } = useTheme();
     const [scrolled, setScrolled] = useState(false);
 
     useEffect(() => { if (user) navigate('/dashboard', { replace: true }); }, [user, navigate]);
+
+    // Force light theme on landing page, restore on leave
+    useEffect(() => {
+        const prev = theme;
+        setTheme('light');
+        return () => setTheme(prev);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     useEffect(() => {
         const fn = () => setScrolled(window.scrollY > 20);
         window.addEventListener('scroll', fn);
@@ -220,7 +230,7 @@ export default function Landing() {
                         <button className="btn btn-primary" id="cta-signup" onClick={() => navigate('/register')}>
                             Create free account <ArrowRight size={16} />
                         </button>
-                        <button className="btn-outline" id="cta-signin" onClick={() => navigate('/login')}>
+                        <button className="btn-outline-white" id="cta-signin" onClick={() => navigate('/login')}>
                             Sign in instead
                         </button>
                     </div>
