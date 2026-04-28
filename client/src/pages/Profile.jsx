@@ -3,24 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { userAPI } from '../services/api';
-import { ArrowLeft, User, Mail, Moon, Sun, Save, Loader, Camera, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, User, Mail, Moon, Sun, Save, Loader, Pencil, Trash2, Upload, X } from 'lucide-react';
 import './Profile.css';
 
-/* ── Resize & compress image to Base64 using a canvas ── */
-const resizeToBase64 = (file, maxPx = 256, quality = 0.82) =>
+/* ── Resize & compress image to Base64 using Canvas ── */
+const resizeToBase64 = (file, maxPx = 256, quality = 0.85) =>
     new Promise((resolve, reject) => {
         const img = new Image();
         const url = URL.createObjectURL(file);
         img.onload = () => {
             URL.revokeObjectURL(url);
             const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-            const w = Math.round(img.width * scale);
-            const h = Math.round(img.height * scale);
             const canvas = document.createElement('canvas');
-            canvas.width = w;
-            canvas.height = h;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, w, h);
+            canvas.width  = Math.round(img.width  * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
             resolve(canvas.toDataURL('image/jpeg', quality));
         };
         img.onerror = reject;
@@ -33,16 +30,19 @@ const Profile = () => {
     const navigate = useNavigate();
     const fileInputRef = useRef();
 
-    const [username, setUsername] = useState('');
+    const [username, setUsername]       = useState('');
     const [pendingTheme, setPendingTheme] = useState(theme);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading]         = useState(false);
     const [avatarLoading, setAvatarLoading] = useState(false);
-    const [message, setMessage] = useState({ text: '', type: '' });
+    const [message, setMessage]         = useState({ text: '', type: '' });
 
-    // Preview state (before upload)
-    const [previewB64, setPreviewB64] = useState(null); // compressed base64 ready to upload
-    const [previewUrl, setPreviewUrl] = useState(null); // object URL just for display
-    const [isDragging, setIsDragging] = useState(false);
+    // Preview state
+    const [previewB64, setPreviewB64]   = useState(null);
+    const [previewUrl, setPreviewUrl]   = useState(null);
+    const [isDragging, setIsDragging]   = useState(false);
+
+    // Avatar edit panel open/close
+    const [editOpen, setEditOpen]       = useState(false);
 
     useEffect(() => {
         if (user) {
@@ -51,7 +51,6 @@ const Profile = () => {
         }
     }, [user]);
 
-    // Clean up preview object URL on unmount
     useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
     const showMessage = (text, type = 'success') => {
@@ -59,31 +58,22 @@ const Profile = () => {
         setTimeout(() => setMessage({ text: '', type: '' }), 3500);
     };
 
-    /* ── Avatar helpers ── */
     const avatarSrc = previewUrl || user?.avatar || null;
+    const initials  = user?.username?.slice(0, 2).toUpperCase() || '??';
 
+    /* ── File processing ── */
     const processFile = async (file) => {
         if (!file) return;
         const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        if (!allowed.includes(file.type)) {
-            showMessage('Only JPG, PNG, GIF or WebP images allowed', 'error');
-            return;
-        }
-        if (file.size > 10 * 1024 * 1024) {
-            showMessage('Please choose an image under 10 MB', 'error');
-            return;
-        }
+        if (!allowed.includes(file.type)) { showMessage('Only JPG, PNG, GIF or WebP images allowed', 'error'); return; }
+        if (file.size > 10 * 1024 * 1024) { showMessage('Please choose an image under 10 MB', 'error'); return; }
         try {
-            // Show instant preview via object URL
             if (previewUrl) URL.revokeObjectURL(previewUrl);
             setPreviewUrl(URL.createObjectURL(file));
-
-            // Compress in the background
-            const b64 = await resizeToBase64(file, 256, 0.82);
+            const b64 = await resizeToBase64(file);
             setPreviewB64(b64);
-        } catch {
-            showMessage('Could not process image', 'error');
-        }
+            setEditOpen(false); // close panel, show upload/cancel buttons
+        } catch { showMessage('Could not process image', 'error'); }
     };
 
     const handleFileChange = (e) => processFile(e.target.files?.[0]);
@@ -91,8 +81,7 @@ const Profile = () => {
 
     const cancelPreview = () => {
         if (previewUrl) URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
-        setPreviewB64(null);
+        setPreviewUrl(null); setPreviewB64(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
@@ -104,26 +93,21 @@ const Profile = () => {
             updateUser({ avatar: updated.avatar });
             cancelPreview();
             showMessage('Profile photo updated!');
-        } catch (err) {
-            showMessage(err.message || 'Upload failed', 'error');
-        } finally {
-            setAvatarLoading(false);
-        }
+        } catch (err) { showMessage(err.message || 'Upload failed', 'error'); }
+        finally { setAvatarLoading(false); }
     };
 
     const handleDeleteAvatar = async () => {
         if (!window.confirm('Remove your profile photo?')) return;
         setAvatarLoading(true);
+        setEditOpen(false);
         try {
             await userAPI.deleteAvatar();
             updateUser({ avatar: '' });
             cancelPreview();
             showMessage('Profile photo removed');
-        } catch (err) {
-            showMessage(err.message || 'Delete failed', 'error');
-        } finally {
-            setAvatarLoading(false);
-        }
+        } catch (err) { showMessage(err.message || 'Delete failed', 'error'); }
+        finally { setAvatarLoading(false); }
     };
 
     /* ── Profile save ── */
@@ -134,20 +118,14 @@ const Profile = () => {
             updateUser({ username: updated.username, theme: updated.theme });
             setTheme(pendingTheme);
             showMessage('Profile updated!');
-        } catch (err) {
-            showMessage(err.message || 'Update failed', 'error');
-        } finally {
-            setLoading(false);
-        }
+        } catch (err) { showMessage(err.message || 'Update failed', 'error'); }
+        finally { setLoading(false); }
     };
-
-    const initials = user?.username?.slice(0, 2).toUpperCase() || '??';
 
     return (
         <div className="profile-page">
             <div className="auth-bg-orbs">
-                <div className="orb orb-1" />
-                <div className="orb orb-2" />
+                <div className="orb orb-1" /><div className="orb orb-2" />
             </div>
 
             <div className="profile-container animate-scale-in">
@@ -163,18 +141,28 @@ const Profile = () => {
                         onDragLeave={() => setIsDragging(false)}
                         onDrop={handleDrop}
                     >
-                        <div className="avatar-frame" onClick={() => fileInputRef.current?.click()}>
-                            {avatarSrc ? (
-                                <img src={avatarSrc} alt="Avatar" className="avatar-img" />
-                            ) : (
-                                <div className="avatar-initials">{initials}</div>
+                        {/* Avatar circle */}
+                        <div className="avatar-frame">
+                            {avatarSrc
+                                ? <img src={avatarSrc} alt="Avatar" className="avatar-img" />
+                                : <div className="avatar-initials">{initials}</div>}
+
+                            {avatarLoading && (
+                                <div className="avatar-overlay">
+                                    <Loader size={22} className="spin" />
+                                </div>
                             )}
-                            <div className="avatar-overlay">
-                                {avatarLoading
-                                    ? <Loader size={22} className="spin" />
-                                    : <Camera size={22} />}
-                            </div>
                         </div>
+
+                        {/* ✏️ Edit pencil — always visible */}
+                        <button
+                            className="avatar-edit-btn"
+                            onClick={() => setEditOpen(o => !o)}
+                            title="Edit photo"
+                            disabled={avatarLoading}
+                        >
+                            <Pencil size={13} />
+                        </button>
 
                         <input
                             ref={fileInputRef}
@@ -185,66 +173,56 @@ const Profile = () => {
                         />
                     </div>
 
-                    <h1 className="profile-title">{user?.username}</h1>
-                    <p className="profile-email">
-                        <Mail size={14} /> {user?.email}
-                    </p>
+                    {/* Edit dropdown panel */}
+                    {editOpen && !previewB64 && (
+                        <div className="avatar-edit-panel animate-slide-down">
+                            <button
+                                className="avatar-panel-btn"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                <Upload size={15} />
+                                {user?.avatar ? 'Change Photo' : 'Upload Photo'}
+                            </button>
+                            {user?.avatar && (
+                                <button
+                                    className="avatar-panel-btn danger"
+                                    onClick={handleDeleteAvatar}
+                                >
+                                    <Trash2 size={15} /> Remove Photo
+                                </button>
+                            )}
+                            <button className="avatar-panel-btn muted" onClick={() => setEditOpen(false)}>
+                                <X size={14} /> Cancel
+                            </button>
+                        </div>
+                    )}
 
-                    {/* Avatar action buttons */}
-                    <div className="avatar-actions">
-                        {previewB64 ? (
-                            <>
-                                <button
-                                    className="btn btn-primary btn-sm avatar-btn"
-                                    onClick={handleUpload}
-                                    disabled={avatarLoading}
-                                >
-                                    {avatarLoading ? <Loader size={14} className="spin" /> : <Upload size={14} />}
-                                    Upload Photo
-                                </button>
-                                <button
-                                    className="btn btn-secondary btn-sm avatar-btn"
-                                    onClick={cancelPreview}
-                                    disabled={avatarLoading}
-                                >
-                                    <X size={14} /> Cancel
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <button
-                                    className="btn btn-secondary btn-sm avatar-btn"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={avatarLoading}
-                                >
-                                    <Camera size={14} />
-                                    {user?.avatar ? 'Change Photo' : 'Add Photo'}
-                                </button>
-                                {user?.avatar && (
-                                    <button
-                                        className="btn btn-danger btn-sm avatar-btn"
-                                        onClick={handleDeleteAvatar}
-                                        disabled={avatarLoading}
-                                    >
-                                        <Trash2 size={14} /> Remove
-                                    </button>
-                                )}
-                            </>
-                        )}
-                    </div>
+                    {/* Preview confirm buttons */}
+                    {previewB64 && (
+                        <div className="avatar-actions">
+                            <button className="btn btn-primary btn-sm avatar-btn" onClick={handleUpload} disabled={avatarLoading}>
+                                {avatarLoading ? <Loader size={14} className="spin" /> : <Upload size={14} />}
+                                Upload Photo
+                            </button>
+                            <button className="btn btn-secondary btn-sm avatar-btn" onClick={cancelPreview} disabled={avatarLoading}>
+                                <X size={14} /> Cancel
+                            </button>
+                        </div>
+                    )}
+
+                    <h1 className="profile-title">{user?.username}</h1>
+                    <p className="profile-email"><Mail size={14} /> {user?.email}</p>
 
                     <p className="avatar-hint">
                         {previewB64
-                            ? 'Click "Upload Photo" to save'
-                            : 'Click photo or drag & drop · Auto-resized to 256 px'}
+                            ? 'Preview ready — click Upload Photo to save'
+                            : 'Click ✏️ to add, change or remove your photo · Drag & drop supported'}
                     </p>
                 </div>
 
                 {/* Toast */}
                 {message.text && (
-                    <div className={`toast-inline toast-${message.type}`}>
-                        {message.text}
-                    </div>
+                    <div className={`toast-inline toast-${message.type}`}>{message.text}</div>
                 )}
 
                 {/* ── Profile Form ── */}
@@ -254,12 +232,10 @@ const Profile = () => {
                         <div className="input-wrapper">
                             <User size={18} className="input-icon" />
                             <input
-                                type="text"
-                                value={username}
+                                type="text" value={username}
                                 onChange={e => setUsername(e.target.value)}
                                 className="input-field input-with-icon"
-                                minLength={3}
-                                maxLength={30}
+                                minLength={3} maxLength={30}
                             />
                         </div>
                     </div>
@@ -267,16 +243,10 @@ const Profile = () => {
                     <div className="form-group">
                         <label className="form-label">Theme Preference</label>
                         <div className="theme-toggle-row">
-                            <button
-                                className={`theme-option ${pendingTheme === 'light' ? 'selected' : ''}`}
-                                onClick={() => setPendingTheme('light')}
-                            >
+                            <button className={`theme-option ${pendingTheme === 'light' ? 'selected' : ''}`} onClick={() => setPendingTheme('light')}>
                                 <Sun size={18} /> Light
                             </button>
-                            <button
-                                className={`theme-option ${pendingTheme === 'dark' ? 'selected' : ''}`}
-                                onClick={() => setPendingTheme('dark')}
-                            >
+                            <button className={`theme-option ${pendingTheme === 'dark' ? 'selected' : ''}`} onClick={() => setPendingTheme('dark')}>
                                 <Moon size={18} /> Dark
                             </button>
                         </div>
