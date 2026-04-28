@@ -8,11 +8,12 @@ import './Profile.css';
 
 const Profile = () => {
     const { user, updateUser } = useAuth();
-    const { theme, toggleTheme } = useTheme();
+    const { theme, setTheme } = useTheme();
     const navigate = useNavigate();
     const fileInputRef = useRef();
 
     const [username, setUsername] = useState('');
+    const [pendingTheme, setPendingTheme] = useState(theme); // local only until Save
     const [loading, setLoading] = useState(false);
     const [avatarLoading, setAvatarLoading] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
@@ -23,7 +24,10 @@ const Profile = () => {
     const [isDragging, setIsDragging] = useState(false);
 
     useEffect(() => {
-        if (user) setUsername(user.username);
+        if (user) {
+            setUsername(user.username);
+            setPendingTheme(user.theme || theme);
+        }
     }, [user]);
 
     // Clean up object URL when component unmounts or preview changes
@@ -108,8 +112,10 @@ const Profile = () => {
     const handleSave = async () => {
         setLoading(true);
         try {
-            const updated = await userAPI.updateProfile({ username, theme });
+            const updated = await userAPI.updateProfile({ username, theme: pendingTheme });
             updateUser({ username: updated.username, theme: updated.theme });
+            // Apply theme visually only on confirmed save
+            setTheme(pendingTheme);
             showMessage('Profile updated!');
         } catch (err) {
             showMessage(err.message || 'Update failed', 'error');
@@ -248,18 +254,19 @@ const Profile = () => {
                         <label className="form-label">Theme Preference</label>
                         <div className="theme-toggle-row">
                             <button
-                                className={`theme-option ${theme === 'light' ? 'selected' : ''}`}
-                                onClick={() => { if (theme !== 'light') toggleTheme(); }}
+                                className={`theme-option ${pendingTheme === 'light' ? 'selected' : ''}`}
+                                onClick={() => setPendingTheme('light')}
                             >
                                 <Sun size={18} /> Light
                             </button>
                             <button
-                                className={`theme-option ${theme === 'dark' ? 'selected' : ''}`}
-                                onClick={() => { if (theme !== 'dark') toggleTheme(); }}
+                                className={`theme-option ${pendingTheme === 'dark' ? 'selected' : ''}`}
+                                onClick={() => setPendingTheme('dark')}
                             >
                                 <Moon size={18} /> Dark
                             </button>
                         </div>
+                        <p className="avatar-hint" style={{ marginTop: 6 }}>Click Save Changes to apply</p>
                     </div>
 
                     <button className="btn btn-primary profile-save" onClick={handleSave} disabled={loading}>

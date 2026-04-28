@@ -9,9 +9,13 @@ export const useTheme = () => {
 };
 
 export const ThemeProvider = ({ children }) => {
-    const [theme, setTheme] = useState(() => {
+    const [theme, setThemeState] = useState(() => {
         return localStorage.getItem('theme') || 'dark';
     });
+
+    const setTheme = (newTheme) => {
+        if (['light', 'dark'].includes(newTheme)) setThemeState(newTheme);
+    };
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -19,11 +23,11 @@ export const ThemeProvider = ({ children }) => {
     }, [theme]);
 
     const toggleTheme = () => {
-        setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+        setThemeState(prev => prev === 'dark' ? 'light' : 'dark');
     };
 
     return (
-        <ThemeContext.Provider value={{ theme, toggleTheme }}>
+        <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
             {children}
         </ThemeContext.Provider>
     );
